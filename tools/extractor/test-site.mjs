@@ -87,6 +87,24 @@ for (const opt of tool.options ?? []) {
   check(`option ${opt.id} declares a bit`, Number.isInteger(opt.bit), String(opt.bit));
 }
 
+// A variant id has to be unique within its input: it is what a page uses to
+// tell one accepted file from another, and this project has two releases of
+// the same script that only their ids separate. JSON Schema cannot say this.
+for (const inp of tool.inputs) {
+  const ids = (inp.variants ?? []).map((v) => v.id);
+  const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+  check(`input ${inp.id}: variant ids are unique`, dupes.length === 0, dupes.join(", "));
+}
+
+// A strict input with nothing to match is a slot no file can ever fill: the
+// host refuses anything unrecognised, and every file is unrecognised.
+for (const inp of tool.inputs) {
+  const strict = inp.strict !== false;
+  const known = (inp.variants ?? []).length;
+  check(`input ${inp.id}: strict input has variants to match`, !strict || known > 0,
+    strict ? `strict with ${known} variant(s)` : "not strict");
+}
+
 // --- the module resolves beside the manifest, and is the one described ------
 
 const url = tool.binary.url ?? tool.binary.file;

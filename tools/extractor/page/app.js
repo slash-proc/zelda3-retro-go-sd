@@ -24,7 +24,15 @@ const RUN_TIMEOUT_MS = 120_000;
 // The value is always an array of { bytes, sha1, name, variant }: a role the
 // manifest marks repeatable can hold several files, any other role holds at
 // most one. A role the user has not filled is absent.
-const state = { wasmBytes: null, tool: null, manifest: null, files: new Map(), lastResults: null };
+const state = {
+  wasmBytes: null, tool: null, manifest: null, files: new Map(), lastResults: null,
+  // The hashes of a verified reference run. Not a manifest field: the manifest
+  // describes what to install, and no two users need get the same bytes out of
+  // a converter. This is the project's own record of one run it stands behind,
+  // published beside this page and used only to tell a user whether the
+  // extraction they just did matches it.
+  reference: null,
+};
 
 const setStatus = (el, cls, text) => {
   el.hidden = false;
@@ -70,24 +78,40 @@ async function loadFrom(manifestUrl) {
 
   const tool = manifest.tools?.[0];
   if (!tool) throw new Error("manifest declares no tools");
-  if (manifest.spec !== 1) {
-    throw new Error(`manifest declares spec ${manifest.spec}, this page reads spec 1`);
+  if (manifest.schemaVersion !== 1) {
+    throw new Error(
+      `manifest declares schemaVersion ${manifest.schemaVersion}, this page reads 1`,
+    );
+  }
+  if (tool.processor?.type !== "wasm" || tool.processor?.version !== 1) {
+    throw new Error(
+      `manifest declares processor ${tool.processor?.type}/${tool.processor?.version}, ` +
+      `this page implements wasm/1`,
+    );
   }
 
-  const moduleUrl = new URL(tool.module.url ?? tool.module.file, new URL(manifestUrl, location.href));
+  // Every url in a manifest is a plain filename resolved beside the manifest
+  // that named it, which is what lets the same manifest work from this site
+  // and from an offline bundle.
+  const binary = tool.binary;
+  const moduleUrl = new URL(binary.url ?? binary.file, new URL(manifestUrl, location.href));
   // Content-address the request so a new module can never be served from a
   // cache entry belonging to an older one. The hash is checked below either
   // way; this stops the wrong bytes arriving in the first place.
-  if (tool.module.sha256) moduleUrl.searchParams.set("v", tool.module.sha256.slice(0, 16));
+  if (binary.sha256) moduleUrl.searchParams.set("v", binary.sha256.slice(0, 16));
   const wasmRes = await fetch(moduleUrl, FRESH);
-  if (!wasmRes.ok) throw new Error(`could not fetch ${tool.module.file} (${wasmRes.status})`);
+  if (!wasmRes.ok) throw new Error(`could not fetch ${binary.file} (${wasmRes.status})`);
   const bytes = new Uint8Array(await wasmRes.arrayBuffer());
+
+  if (binary.bytes && bytes.length !== binary.bytes) {
+    throw new Error(`${binary.file}: expected ${binary.bytes} bytes, got ${bytes.length}`);
+  }
 
   // The manifest says which bytes it describes. If they disagree, the manifest
   // is describing something other than what we are about to run, and the honest
   // response is to refuse rather than to prefer one of them.
   const sha256 = await digest("SHA-256", bytes);
-  if (sha256 !== tool.module.sha256) throw new Error(t().fatal.mismatch);
+  if (sha256 !== binary.sha256) throw new Error(t().fatal.mismatch);
 
   // The real gate: decided by reading the binary, not by reading the manifest.
   const result = verify(bytes);
@@ -98,54 +122,41 @@ async function loadFrom(manifestUrl) {
 
 async function loadModule() {
   try {
-    let published = DEFAULT_MANIFEST;
+    let manifestUrl = DEFAULT_MANIFEST;
     try {
       const cfg = await fetch("config.json", FRESH);
-      if (cfg.ok) published = (await cfg.json()).manifestUrl || published;
-    } catch { /* no config: fall back to the copy beside this page */ }
+      if (cfg.ok) manifestUrl = (await cfg.json()).manifestUrl || manifestUrl;
+    } catch { /* no config: fall back to a manifest beside this page */ }
 
-    // Two sources, in order of preference. The published one on the dist branch
-    // is what a third-party consumer reads, and reading it here means a release
-    // reaches users without redeploying this page. The copy deployed beside the
-    // page is the safety net.
-    //
-    // The fallback covers more than an unreachable dist branch. The page and
-    // the published module are versioned independently: the page ships from
-    // main, the dist branch only from a tag, so between an ABI change and the
-    // next release the published module is genuinely older than this page and
-    // fails its checks. That is the verifier doing its job, not a broken page,
-    // and the right response is to use the module this page shipped with rather
-    // than to show a dead page until someone cuts a tag.
-    const sources = published === DEFAULT_MANIFEST ? [published] : [published, DEFAULT_MANIFEST];
-    let loaded = null;
-    const reasons = [];
-    for (const url of sources) {
-      try {
-        loaded = await loadFrom(url);
-        break;
-      } catch (e) {
-        reasons.push(`${url}: ${e.message ?? e}`);
-      }
-    }
-    if (!loaded) throw new Error(reasons.join("; "));
-    if (reasons.length) {
-      // Not shown to the user: they cannot act on it and the page works. It
-      // belongs in the console for whoever is wondering why the tag is behind.
-      console.info(`using the module beside this page; ${reasons.join("; ")}`);
-    }
-
-    const { manifest, tool, bytes, sha256 } = loaded;
+    // One source, deliberately. The page and the dist tree it reads are built
+    // by the same job and deployed in the same artifact, so they cannot be out
+    // of step with each other -- and a fallback copy would be a second module
+    // that no manifest describes and nobody verifies. If the manifest this
+    // site published will not load, that is a broken deploy and the page
+    // should say so rather than quietly running something else.
+    const { manifest, tool, bytes, sha256 } = await loadFrom(manifestUrl);
     state.wasmBytes = bytes;
     state.tool = tool;
     state.manifest = manifest;
     state.moduleSha256 = sha256;
+
+    // Optional, and a failure to fetch it is not a failure of the page: it only
+    // costs the "matches the verified run" verdict on a result.
+    try {
+      const ref = await fetch("reference.json", FRESH);
+      if (ref.ok) state.reference = await ref.json();
+    } catch { /* no reference published; results simply carry no verdict */ }
 
     buildRoleInputs();
     // The info box doubles as the check's result: it appears only on the far
     // side of the hash match and the verifier, and it is drawn from the
     // manifest, so it says the right thing for any project using this spec.
     $("about").hidden = false;
-    if (manifest.source?.repo) {
+    // `docs` is the manifest's own link for a human; source.repo is the
+    // fallback for a manifest published before that field existed.
+    if (manifest.docs) {
+      $("repo-link").href = manifest.docs;
+    } else if (manifest.source?.repo) {
       $("repo-link").href = `https://github.com/${manifest.source.repo}`;
     }
     renderLocalised();
@@ -168,7 +179,7 @@ function renderLocalised() {
   if (!tool) return;
 
   const title = localeText(tool.title) || state.manifest?.title || "";
-  const shortTitle = state.manifest?.shortTitle ?? state.manifest?.title ?? title;
+  const shortTitle = state.manifest?.title ?? title;
   $("title").textContent = t().app.heading(shortTitle);
   document.title = $("title").textContent;
 
@@ -378,7 +389,7 @@ function acceptedLanguages(role) {
   for (const v of role.variants ?? []) {
     // Region and edition are noise in a list of languages: "fr" and "fr-c"
     // are both French, and saying so twice helps nobody.
-    const base = String(v.language ?? "").split("-")[0];
+    const base = String(v.id ?? "").split("-")[0];
     // A variant whose code is not a language at all (this manifest carries
     // "redux", which is a script for a language already in the list) has
     // nothing to add here. It is still named in the hashes below.
@@ -517,10 +528,12 @@ function renderFileStatus(role, got) {
  * it and says what it did rather than offering a control.
  *
  * Whether an unrecognised file is refused at all is the manifest's call, via
- * the role's `acceptsModified`. A project whose users routinely supply hacked
- * ROMs sets it and gets a note instead of a refusal; a project that reads
- * fixed addresses out of one specific release clears it, and a file that
- * hashes to something else is simply the wrong file.
+ * the role's `strict`, and enforcing it is this page's job rather than the
+ * module's: the host has the file, the hashes and the user in front of it. A
+ * project whose users routinely supply hacked ROMs clears `strict` and gets a
+ * note instead of a refusal; a project that reads fixed addresses out of one
+ * specific release leaves it set, and a file that hashes to something else is
+ * simply the wrong file. Both of this project's roles are strict.
  */
 function refusalFor(role, got) {
   const s = t().input;
@@ -536,7 +549,7 @@ function refusalFor(role, got) {
     return (s.wrongRole ?? ((n, o, r) => `${n} is the ${o}, not the ${r}.`))(
       got.name, localeText(other.label), localeText(role.label));
   }
-  if (!got.variant && role.acceptsModified === false) {
+  if (!got.variant && role.strict !== false) {
     const variants = role.variants ?? [];
     // With one acceptable file, name it and its hash outright. With a dozen,
     // the list belongs behind the "?" and the message points at it; either
@@ -551,8 +564,13 @@ function refusalFor(role, got) {
   }
   // The module refuses a second file for a language it already has, so refuse
   // it up front and say so rather than spending a run to find out.
-  const dup = role.repeatable && got.variant?.language
-    && existing.some((f) => f.variant?.language === got.variant.language);
+  // Variant id, because a language code is not something the manifest carries:
+  // ids are unique per input, so two releases of one script (this manifest has
+  // two "English Redux" ROMs, `redux` and `redux-2`) read as different here and
+  // both get through. The module refuses that pair itself, with its own
+  // message; everything a user is likely to do wrong is caught here.
+  const dup = role.repeatable && got.variant?.id
+    && existing.some((f) => f.variant?.id === got.variant.id);
   if (dup) {
     return (s.languageAlreadyAdded ?? ((v) => `${v} has already been added.`))(
       localeText(got.variant.label));
@@ -646,12 +664,6 @@ async function run() {
   // Registration order follows the manifest's role order, but the module
   // identifies each file by content, so the order is a convenience only.
   const ordered = allFiles();
-  // Only a role that says it accepts modified files can ask for the hash check
-  // to be skipped. Everywhere else an unrecognised file was refused at the
-  // picker, so there is nothing to relax and the flag stays off.
-  const anyUnrecognised = roles().some(
-    (r) => r.acceptsModified !== false && filesFor(r.id).some((f) => !f.variant));
-
   const worker = new Worker("worker.js", { type: "module" });
   // The ABI has no cancel flag, so this is what a timeout means: stop the
   // thread the module is running on.
@@ -684,7 +696,9 @@ async function run() {
   worker.postMessage({
     wasmBytes: state.wasmBytes,
     inputs: ordered.map((f) => f.bytes),
-    flags: anyUnrecognised ? (state.tool.flags?.noHashCheck ?? 0) : 0,
+    // No flags. Admission is settled before the run, by `strict` above, and
+    // this tool declares no options for a user to set.
+    flags: 0,
     expectedOutputs: state.tool.outputs.map((o) => o.filename),
     maxOutputBytes: state.tool.limits?.maxOutputBytes,
   });
@@ -706,7 +720,7 @@ async function showResults({ outputs, warnings }) {
     }
   }
 
-  const reference = state.tool.reference;
+  const reference = state.reference;
   const list = $("downloads");
   list.replaceChildren();
   for (const out of outputs) {
@@ -720,6 +734,18 @@ async function showResults({ outputs, warnings }) {
     a.textContent = t().results.download(out.name);
     const meta = document.createElement("div");
     meta.className = "meta";
+
+    // What the file is, in the project's own words. The link says the name the
+    // user has to put on the card; this says what it is for, and only the
+    // project knows that.
+    const declared = state.tool.outputs.find((o) => o.filename === out.name);
+    const outLabel = localeText(declared?.label);
+    if (outLabel) {
+      const what = document.createElement("span");
+      what.className = "out-label";
+      what.textContent = outLabel;
+      meta.append(what, " · ");
+    }
 
     // If this repo published the hashes of a verified reference run, and the
     // user gave the same inputs, the output should match exactly. The verdict

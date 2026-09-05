@@ -123,11 +123,18 @@ def download(repo: str, tag: str, dest: Path) -> bool:
 
 
 def declared_files(manifest: dict) -> list[str]:
-    """Every file the manifest names, in a stable order."""
+    """Every file the manifest names, in a stable order.
+
+    Including the ELF in symbols[], which is published but never installed: it
+    belongs in dist/<tag>/ so a crash can be symbolicated and so an offline
+    bundle carries it, and the mirror fetches every named file off the release.
+    """
     names = []
     for target in manifest["targets"]:
         for artifact in target["artifacts"]:
             names.append(artifact["url"])
+        for symbols in target.get("symbols", []):
+            names.append(symbols["url"])
     for tool in manifest["tools"]:
         names.append(tool["binary"]["url"])
     return sorted(set(names))
@@ -164,8 +171,17 @@ def index_entry(tag: str, release: dict, manifest: dict, bundle: str | None) -> 
     targets = manifest["targets"]
     # Duplicated into the index so a version picker needs one fetch, not N+1.
     # The checker verifies these against the manifest they came from.
+    # "You must supply something" -- whatever the something is. A converter
+    # input, or a BIOS an emulator cannot run without: every core ships
+    # tools: [], so counting only inputs would tell a picker that PC Engine CD
+    # needs nothing when it will not start without a System Card.
     needs_user_files = any(
         i["required"] for tool in manifest["tools"] for i in tool["inputs"]
+    ) or any(
+        b.get("required") or b.get("requiredFor")
+        for target in manifest["targets"]
+        for system in target.get("systems", [])
+        for b in system.get("bios", [])
     )
     return {
         "tag": tag,

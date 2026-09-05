@@ -1,0 +1,158 @@
+{
+  "$comment": "The hand-written half of this project's manifest. Everything else -- sizes, hashes, the firmware ABI, the display name, the module's memory ceiling -- is derived from the built bytes by scripts/make_manifest.py. Nothing derivable belongs here.",
+  "tool": {
+    "id": "zelda3-assets",
+    "title": {
+      "en": "Zelda 3 asset extraction",
+      "fr": "Extraction des ressources de Zelda 3",
+      "de": "Zelda 3 Ressourcen-Extraktion"
+    },
+    "maxOutputBytes": 67108864,
+    "options": [],
+    "inputs": [
+      {
+        "id": "base",
+        "required": true,
+        "repeatable": false,
+        "label": {
+          "en": "Base ROM",
+          "fr": "ROM de base",
+          "de": "Basis-ROM"
+        },
+        "description": {
+          "en": "US (NTSC) cartridge dump.",
+          "fr": "Copie de la cartouche US (NTSC).",
+          "de": "Kopie der US-Fassung (NTSC)."
+        },
+        "extensions": [
+          ".sfc",
+          ".smc"
+        ],
+        "maxBytes": 8388608,
+        "variants": [
+          {
+            "id": "us",
+            "label": {
+              "en": "Legend of Zelda, The - A Link to the Past (USA)"
+            },
+            "sha1": "6D4F10A8B10E10DBE624CB23CF03B88BB8252973"
+          }
+        ],
+        "strict": true
+      },
+      {
+        "id": "language",
+        "required": false,
+        "repeatable": true,
+        "label": {
+          "en": "Translated ROM",
+          "fr": "ROM traduite",
+          "de": "Übersetztes ROM"
+        },
+        "description": {
+          "en": "Add languages from translated ROMs. One file per language.",
+          "fr": "Ajoutez des langues à partir de ROMs traduites. Un fichier par langue.",
+          "de": "Sprachen aus übersetzten ROMs hinzufügen. Eine Datei je Sprache."
+        },
+        "extensions": [
+          ".sfc",
+          ".smc"
+        ],
+        "maxBytes": 8388608,
+        "variants": [
+          {
+            "id": "de",
+            "label": {
+              "en": "Legend of Zelda, The - A Link to the Past (Germany)"
+            },
+            "sha1": "2E62494967FB0AFDF5DA1635607F9641DF7C6559"
+          },
+          {
+            "id": "fr",
+            "label": {
+              "en": "Legend of Zelda, The - A Link to the Past (France)"
+            },
+            "sha1": "229364A1B92A05167CD38609B1AA98F7041987CC"
+          },
+          {
+            "id": "fr-c",
+            "label": {
+              "en": "Legend of Zelda, The - A Link to the Past (Canada)"
+            },
+            "sha1": "C1C6C7F76FFF936C534FF11F87A54162FC0AA100"
+          },
+          {
+            "id": "en",
+            "label": {
+              "en": "Legend of Zelda, The - A Link to the Past (Europe)"
+            },
+            "sha1": "7C073A222569B9B8E8CA5FCB5DFEC3B5E31DA895"
+          },
+          {
+            "id": "es",
+            "label": {
+              "en": "Spanish translation"
+            },
+            "sha1": "461FCBD700D1332009C0E85A7A136E2A8E4B111E"
+          },
+          {
+            "id": "pl",
+            "label": {
+              "en": "Polish translation"
+            },
+            "sha1": "3C4D605EEFDA1D76F101965138F238476655B11D"
+          },
+          {
+            "id": "pt",
+            "label": {
+              "en": "Portuguese translation"
+            },
+            "sha1": "D0D09ED41F9C373FE6AFDCCAFBF0DA8C88D3D90D"
+          },
+          {
+            "id": "redux",
+            "label": {
+              "en": "English Redux (translation release)"
+            },
+            "sha1": "B2A07A59E64C498BC1B2F28728F9BF4014C8D582"
+          },
+          {
+            "id": "redux-2",
+            "label": {
+              "en": "English Redux (hack release)"
+            },
+            "sha1": "9325C22EB0A2A1F0017157C8B620BC3A605CEDE1"
+          },
+          {
+            "id": "nl",
+            "label": {
+              "en": "Dutch translation"
+            },
+            "sha1": "FA8ADFDBA2697C9A54D583A1284A22AC764C7637"
+          },
+          {
+            "id": "sv",
+            "label": {
+              "en": "Swedish translation"
+            },
+            "sha1": "43CD3438469B2C3FE879EA2F410B3EF3CB3F1CA4"
+          }
+        ],
+        "strict": true
+      }
+    ],
+    "outputs": [
+      {
+        "id": "assets",
+        "filename": "zelda3_assets.dat",
+        "maxBytes": 67108864,
+        "label": {
+          "en": "Asset pack",
+          "fr": "Pack de ressources",
+          "de": "Ressourcenpaket"
+        }
+      }
+    ],
+    "hashesDeclaredIn": "tools/extractor/src/rom.rs"
+  }
+}

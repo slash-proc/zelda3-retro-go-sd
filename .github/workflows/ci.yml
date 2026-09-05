@@ -62,6 +62,12 @@ jobs:
       - name: Page strings resolve in every locale
         run: node test-i18n.mjs
 
+      # gwrg.json states the hashes a UI matches against; rom.rs states the
+      # hashes the module accepts. The manifest's copy is the one that can rot
+      # silently, so it is checked against the module's.
+      - name: Declared ROM hashes match the module
+        run: node test-variants.mjs
+
       - name: Verify the built module
         run: node verify.mjs target/wasm32-unknown-unknown/release/zelda3_restool.wasm
 
@@ -184,11 +190,21 @@ jobs:
           set -euo pipefail
           PACKED_BIN="${{ needs.build.outputs.packed_bin }}"
           RO_BIN="${{ needs.build.outputs.ro_bin }}"
+          TARGET_ELF="${{ needs.build.outputs.target_elf }}"
           cp dist/zelda3_restool.wasm release/
+          # The ELF, for symbols[]. Published so a crash address can be
+          # resolved to a function, and carried in the offline bundle -- but
+          # never installed: it is not in the install set and never reaches
+          # the card.
+          cp "dist/${TARGET_ELF}" release/
+          ELF_NAME="$(basename "${TARGET_ELF}")"
+          # --artifact, not --ro: the shared generator takes any number of
+          # extra device files by one flag.
           python3 scripts/make_manifest.py \
             --bin "release/${PACKED_BIN}" \
-            --ro "release/${RO_BIN}" \
+            --artifact "release/${RO_BIN}" \
             --wasm release/zelda3_restool.wasm \
+            --elf "release/${ELF_NAME}" \
             --tag "${GITHUB_REF_NAME}" \
             --repo "${GITHUB_REPOSITORY}" \
             --commit "${GITHUB_SHA}" \
@@ -198,6 +214,7 @@ jobs:
           # attached the two device files; the module is this job's to add.
           echo manifest.json >> release/release-files.txt
           echo zelda3_restool.wasm >> release/release-files.txt
+          echo "${ELF_NAME}" >> release/release-files.txt
 
       # The offline bundle. Attached to the release, not built by the Pages job,
       # so what a user downloads offline is what the project actually published.

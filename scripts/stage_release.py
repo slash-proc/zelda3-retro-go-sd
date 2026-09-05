@@ -215,6 +215,13 @@ def stage_release(
     sd_bin = sd_root / packed_name
     shutil.copy2(bin_path, sd_bin)
 
+    # The loose binary, attached alongside the zips. The dist mirror fetches
+    # every file the manifest names straight off the release, so the binary has
+    # to be there as a file and not only as a zip member. GitHub rewrites the
+    # spaces in its asset name; build_dist.py restores the declared name.
+    flat_bin = out_dir / packed_name
+    shutil.copy2(bin_path, flat_bin)
+
     stem = Path(packed_name).stem
     tag_slug = slug(tag)
 
@@ -249,8 +256,9 @@ def stage_release(
         encoding="utf-8",
     )
 
-    # GitHub Release assets: install zip + debug zip only (no loose .bin).
-    release_files = [archive_path, debug_archive_path]
+    # GitHub Release assets: the loose binary the manifest declares, plus the
+    # install and debug zips for people who install by hand.
+    release_files = [flat_bin, archive_path, debug_archive_path]
     files_path = out_dir / "release-files.txt"
     files_path.write_text(
         "\n".join(p.name for p in release_files) + "\n",

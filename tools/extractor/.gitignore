@@ -1,0 +1,6 @@
+target/
+dist/
+site/
+node_modules/
+package-lock.json
+page.png

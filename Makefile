@@ -127,7 +127,7 @@ pack: $(TARGET_BIN) $(RO_BIN) $(COVER_JPG)
 all: pack
 
 .PHONY: print-PROJECT_KIND print-PACKED_BIN print-CORE_NAME print-DOCKER_IMAGE \
-	print-TARGET_ELF print-TARGET_MAP print-CORE_VERSION
+	print-TARGET_ELF print-TARGET_MAP print-CORE_VERSION print-RO_BIN
 print-PROJECT_KIND:
 	@echo $(PROJECT_KIND)
 print-PACKED_BIN:
@@ -142,6 +142,11 @@ print-TARGET_MAP:
 	@echo $(BUILD_DIR)/$(CORE_NAME)_core.map
 print-CORE_VERSION:
 	@echo $(CORE_VERSION)
+# The second device file. Unlike every other project so far, this homebrew
+# installs two artifacts: the packed binary and the read-only data it reads
+# from the card at run time.
+print-RO_BIN:
+	@echo $(RO_BIN)
 
 clean::
 	$(V)rm -f "$(PACKED_BIN)" $(RO_BIN) $(COVER_JPG)

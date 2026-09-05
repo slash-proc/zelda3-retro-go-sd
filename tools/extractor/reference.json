@@ -1,0 +1,17 @@
+{
+  "inputs": [
+    {
+      "name": "Legend of Zelda, The - A Link to the Past (U) [!].smc",
+      "sha1": "6D4F10A8B10E10DBE624CB23CF03B88BB8252973",
+      "bytes": 1048576
+    }
+  ],
+  "flags": 0,
+  "outputs": [
+    {
+      "name": "zelda3_assets.dat",
+      "bytes": 683888,
+      "sha256": "0fe2e4bd75d70f06fb9a74cd3a9cb336c838149b831b56e8792114a89292c793"
+    }
+  ]
+}

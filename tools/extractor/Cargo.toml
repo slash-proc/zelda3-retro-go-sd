@@ -1,0 +1,19 @@
+[package]
+name = "zelda3-restool"
+version = "0.1.0"
+edition = "2021"
+description = "Zelda 3 asset conversion: ROM in, zelda3_assets.dat out. Compiles to a zero-import wasm module."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "zelda3-restool-cli"
+path = "src/bin/cli.rs"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,10 @@
+[target.wasm32-unknown-unknown]
+# Cap declared memory growth at 64 MiB (1024 pages) so the module's appetite is
+# bounded by the binary itself and the verifier can check it statically.
+#
+# Measured, not guessed. A full US conversion peaks at 84 pages (5.3 MiB) and
+# US + German + French at 118 pages (7.4 MiB); each additional language ROM
+# costs about 17 pages, so even all ten supported translations at once stays
+# near 260 pages. 1024 leaves roughly a factor of four over that worst case and
+# still fits comfortably in a browser tab.
+rustflags = ["-C", "link-arg=--max-memory=67108864"]

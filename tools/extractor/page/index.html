@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zelda 3 asset converter</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <!-- The static text here is English, which is the base locale. i18n.js
+       replaces every [data-i18n] node on load and on each language change, so
+       what ships in the markup is a readable fallback rather than the source
+       of truth. -->
+  <header class="page-head">
+    <h1 id="title">Zelda 3 asset converter</h1>
+    <select id="lang" class="lang-select"
+            data-i18n-title="lang.label" data-i18n-aria-label="lang.aria"></select>
+  </header>
+
+  <p class="lede">
+    <span id="lede-text">Convert a Zelda 3 ROM into
+      <code>zelda3_assets.dat</code></span><button
+      type="button" id="why" class="why" aria-expanded="false"
+      data-i18n-aria-label="why.label" data-i18n-title="why.label">?</button>
+  </p>
+  <!-- The detail behind the "?". A title tooltip alone did nothing on click
+       and nothing at all on touch, so this is a real disclosure. -->
+  <p id="why-text" class="why-text" data-i18n="why.text" hidden></p>
+
+  <div id="fatal" class="status bad" hidden></div>
+
+  <!-- Populated only after the extractor has been fetched, hash-matched
+       against its manifest and passed conformance verification. Its presence
+       is therefore the visible result of that check, while what it actually
+       says is the thing a user wants to know: what goes in, what comes out. -->
+  <div id="about" hidden>
+    <div class="io">
+      <div><span class="k" data-i18n="io.input">Input</span><span id="io-in"></span><span id="io-in-mark" class="mark"></span></div>
+      <div class="arrow" aria-hidden="true">&rarr;</div>
+      <div><span class="k" data-i18n="io.output">Output</span><span id="io-out"></span></div>
+    </div>
+  </div>
+
+  <section id="input">
+    <h2><span class="step">1.</span> <span id="input-heading">Your files</span></h2>
+    <!-- One block per input role declared by the manifest: a plain button and
+         the name of what was chosen, plus a list and an add control for a role
+         the manifest marks repeatable. Dropping a file on a block works too,
+         quietly. A project that takes a single file therefore renders as a
+         single button. -->
+    <div id="roles"></div>
+  </section>
+
+  <section id="run">
+    <h2><span class="step">2.</span> <span data-i18n="run.heading">Convert</span></h2>
+    <button id="go" data-i18n="run.button" disabled>Convert</button>
+    <div id="run-status" class="status" hidden></div>
+    <ul id="warnings" hidden></ul>
+    <div id="results" hidden>
+      <h3 data-i18n="results.heading">Output</h3>
+      <ul id="downloads"></ul>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      <span data-i18n="footer.source">Source and documentation:</span>
+      <a id="repo-link" href="https://github.com/slash-proc/zelda3"
+         data-i18n="footer.repo">the project repository</a>.
+      <span data-i18n="footer.published">This page is published from the same CI
+      run that builds and verifies the module, so the two always match.</span>
+    </p>
+    <p id="module-line" hidden></p>
+  </footer>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

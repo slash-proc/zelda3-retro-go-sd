@@ -64,5 +64,3 @@ at `/covers/homebrew/Zelda 3.img`.
   `BATTERY_INDICATOR=1`.
 - Button bindings follow the Mario vs Zelda OFW face layout
   (`get_ofw_is_mario`).
-- `patches/spc_player_dtc_malloc.patch` moves `SpcPlayer` into DTCM (AHB
-  heap is too small); `make` applies it automatically.

@@ -20,11 +20,6 @@ CORE_ENTRY := app_main
 
 CORE_ZELDA3 := external/zelda3
 
-# Firmware-local tweak: SpcPlayer is too large for the AHB heap budget —
-# allocate from DTCM (same as game-and-watch-retro-go-sd working tree).
-ZELDA3_SPC_PATCH := patches/spc_player_dtc_malloc.patch
-ZELDA3_SPC_PATCH_STAMP := $(CORE_ZELDA3)/.patched_dtc_malloc
-
 CORE_C_SOURCES := \
 $(CORE_ZELDA3)/zelda_rtl.c \
 $(CORE_ZELDA3)/misc.c \
@@ -82,16 +77,6 @@ COVER_JPG  := $(BUILD_DIR)/cover.jpg
 COVER_SRC  := src/assets/cover_src.jpg
 
 include $(GNW_CORE_SDK)/Makefile
-
-# Ensure the SpcPlayer DTCM patch is applied before compiling that unit.
-$(ZELDA3_SPC_PATCH_STAMP): $(ZELDA3_SPC_PATCH) $(CORE_ZELDA3)/spc_player.c
-	$(V)$(ECHO) [ PATCH ] spc_player.c → dtc_malloc
-	$(V)cd $(CORE_ZELDA3) && git apply --check ../$(ZELDA3_SPC_PATCH) 2>/dev/null \
-		&& git apply ../$(ZELDA3_SPC_PATCH) || true
-	$(V)grep -q 'dtc_malloc(sizeof(SpcPlayer))' $(CORE_ZELDA3)/spc_player.c
-	$(V)touch $@
-
-$(BUILD_DIR)/spc_player.o: $(ZELDA3_SPC_PATCH_STAMP)
 
 PACK_HOMEBREW := $(GNW_CORE_SDK)/tools/pack_homebrew.py
 

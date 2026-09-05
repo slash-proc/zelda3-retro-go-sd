@@ -12,4 +12,3 @@ host_saves/
 homebrews/
 .DS_Store
 __pycache__/
-external/zelda3/.patched_dtc_malloc

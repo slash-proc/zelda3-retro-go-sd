@@ -1,5 +1,45 @@
 # Changelog
 
+## [v0.2.0]
+
+### Added
+
+- A version picker. The page reads this site's own `dist/versions.json`,
+  offers every version the mirror holds and defaults to the newest, so a
+  release reaches users without redeploying the page. Switching version
+  reloads the module, its inputs and its accepted hashes, and discards any
+  file already chosen: a file one version accepts another may refuse, and
+  carrying it over would start a run on input this version never approved.
+  Pre-releases are hidden until asked for, and each version shows the
+  firmware ABI it needs, which is the only place a user learns it.
+- A single download containing the whole install: `Zelda 3.bin`,
+  `zelda3.ro` and the `zelda3_assets.dat` the run just produced, as
+  `zelda3-<tag>-gwrg.zip`. The converted file on its own was only half of
+  what somebody needs, and the manifest already named and hashed the rest.
+  Published files are fetched, checked against the size and hash the
+  manifest declares, and a mismatch refuses the zip rather than shipping a
+  broken install.
+- `zip.mjs`, a dependency-free zip writer. Entries are deflated where that
+  helps and stored where it does not; a browser without `CompressionStream`
+  stores everything and still produces a valid archive. Names keep their
+  spaces, which this project needs.
+- `test-i18n.mjs`, which demands every string the page asks for from every
+  locale it offers. A renamed key used to be invisible: the page still
+  loads and the control is simply blank for that language.
+
+### Changed
+
+- The page is now byte-identical to the one smw ships, and carries no fact
+  about this particular game. The list of accepted translations comes from
+  the variants' own labels in the manifest, rather than being inferred from
+  their ids with `Intl.DisplayNames` and a carve-out for the one id that was
+  not a language code.
+- `outputs[].maxBytes` is enforced. The manifest states a ceiling per output
+  as well as one for the whole run, and only the second was being applied.
+- `config.json` points at the version index rather than one manifest.
+  `MANIFEST_URL` still pins a build to a single manifest, which is what an
+  offline bundle needs.
+
 ## [v0.1.0]
 Published under the GWRG distribution model, with the asset extractor.
 

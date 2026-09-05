@@ -18,6 +18,10 @@ binary does not carry (shortName, compression, BIOS, extension grouping).
 Where the two overlap they are cross-checked, and a disagreement is fatal --
 the binary wins arguments, gwrg.json only adds what the binary cannot say.
 
+A project-specific invariant belongs in that project's own tests, not here:
+this file is vendored by every repo, so a check that means something to only
+one of them is dead weight in the other eight.
+
 Usage:
   python3 scripts/make_manifest.py --bin "Zelda 3.bin" --artifact zelda3.ro \\
       --wasm tools/extractor/target/.../zelda3_restool.wasm \\
@@ -31,7 +35,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import struct
 import subprocess
 import sys
@@ -245,35 +248,8 @@ def module_memory_ceiling() -> int:
     return int(out.strip())
 
 
-def check_variant_hashes(tool: dict) -> None:
-    """Every declared variant hash must appear in the module's own table.
-
-    gwrg.json states the hashes a UI matches against; the converter states the
-    hashes it will actually accept. They are the same facts written twice, so
-    the copy that can rot silently is checked against the one that cannot.
-    Opt in with "hashesDeclaredIn": a path, relative to the repo root.
-    """
-    source = tool.get("hashesDeclaredIn")
-    if not source:
-        return
-    path = ROOT / source
-    if not path.is_file():
-        raise SystemExit(f"gwrg.json: hashesDeclaredIn names a missing file: {source}")
-    known = {h.upper() for h in re.findall(r"[0-9a-fA-F]{40}", path.read_text(encoding="utf-8"))}
-    for inp in tool.get("inputs", []):
-        for variant in inp.get("variants", []):
-            sha1 = variant.get("sha1", "").upper()
-            if sha1 and sha1 not in known:
-                raise SystemExit(
-                    f"gwrg.json: variant {variant.get('id')!r} declares sha1 {sha1}, "
-                    f"which does not appear in {source} — the manifest and the "
-                    f"converter disagree about what is accepted"
-                )
-
-
 def build_tool(declared: dict, wasm_path: Path) -> dict:
     verify_module(wasm_path)
-    check_variant_hashes(declared)
     size, sha256 = digest(wasm_path)
 
     max_output = declared.get("maxOutputBytes")

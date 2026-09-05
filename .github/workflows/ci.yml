@@ -18,8 +18,54 @@ concurrency:
 env:
   # Keep in sync with Makefile RELEASE_VERSION / firmware DOCKER_IMAGE.
   DOCKER_IMAGE: sylverb/retro-go-sd-builder:v1.5
+  # Pinned so a toolchain bump is a decision rather than a surprise.
+  RUST_VERSION: 1.90.0
 
 jobs:
+  # The asset extractor. Independent of the device build, and gated on the same
+  # verifier a browser runs: a module that is not structurally sandboxed must
+  # never reach a manifest, because a manifest is a claim that it is safe to run.
+  extractor:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # Not optional. .cargo/config.toml carries the --max-memory link arg and
+        # is found relative to the working directory, so building from the repo
+        # root silently produces a module with unbounded memory growth that the
+        # verifier then rejects. test.mjs resolves the module by relative path
+        # for the same reason.
+        working-directory: tools/extractor
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (pinned for a stable published module)
+        run: |
+          rustup toolchain install "${RUST_VERSION}" --profile minimal --target wasm32-unknown-unknown
+          rustup default "${RUST_VERSION}"
+          rustc --version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # --lib only: the native CLI is a development harness, not a release
+      # artifact. --locked so the dependency set cannot drift under us.
+      - name: Build module
+        run: cargo build --release --locked --target wasm32-unknown-unknown --lib
+
+      - name: Verifier test suite
+        run: node test.mjs
+
+      - name: Verify the built module
+        run: node verify.mjs target/wasm32-unknown-unknown/release/zelda3_restool.wasm
+
+      - name: Upload module
+        uses: actions/upload-artifact@v4
+        with:
+          name: extractor-wasm
+          path: tools/extractor/target/wasm32-unknown-unknown/release/zelda3_restool.wasm
+          if-no-files-found: error
+
   build:
     runs-on: ubuntu-latest
     outputs:
@@ -78,7 +124,7 @@ jobs:
 
   release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, extractor]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -95,6 +141,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts
+          path: dist
+
+      - name: Download the extractor
+        uses: actions/download-artifact@v4
+        with:
+          name: extractor-wasm
           path: dist
 
       - name: Stage release assets
@@ -118,6 +170,42 @@ jobs:
           fi
           python3 scripts/stage_release.py "${STAGE_ARGS[@]}"
 
+      # The dist manifest a web installer reads. Attached to the release, which
+      # is the source of truth; the Pages job mirrors it where a browser can
+      # reach it. See https://github.com/slash-proc/gwrg-dist-spec
+      - name: Generate the dist manifest
+        run: |
+          set -euo pipefail
+          PACKED_BIN="${{ needs.build.outputs.packed_bin }}"
+          RO_BIN="${{ needs.build.outputs.ro_bin }}"
+          cp dist/zelda3_restool.wasm release/
+          python3 scripts/make_manifest.py \
+            --bin "release/${PACKED_BIN}" \
+            --ro "release/${RO_BIN}" \
+            --wasm release/zelda3_restool.wasm \
+            --tag "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --commit "${GITHUB_SHA}" \
+            --out release/manifest.json
+          # Every file the manifest names is installed from the release, so
+          # every one has to be attached to it. stage_release.py already
+          # attached the two device files; the module is this job's to add.
+          echo manifest.json >> release/release-files.txt
+          echo zelda3_restool.wasm >> release/release-files.txt
+
+      # The offline bundle. Attached to the release, not built by the Pages job,
+      # so what a user downloads offline is what the project actually published.
+      - name: Build the offline bundle
+        run: |
+          set -euo pipefail
+          BUNDLE="$(python3 scripts/make_bundle.py \
+            --manifest release/manifest.json --dir release --print-name)"
+          python3 scripts/make_bundle.py \
+            --manifest release/manifest.json \
+            --dir release \
+            --out "release/${BUNDLE}"
+          echo "${BUNDLE}" >> release/release-files.txt
+
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -125,11 +213,136 @@ jobs:
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
           mapfile -t names < release/release-files.txt
-          files=()
-          for name in "${names[@]}"; do
-            files+=("release/${name}")
+
+          # GitHub compares asset names case-insensitively, so two files that
+          # differ only in case cannot both be attached. Catch that here rather
+          # than as a 422 halfway through the upload loop.
+          dupes="$(printf '%s\n' "${names[@]}" | tr '[:upper:]' '[:lower:]' | sort | uniq -d)"
+          if [ -n "${dupes}" ]; then
+            echo "asset names collide case-insensitively: ${dupes}" >&2
+            exit 1
+          fi
+
+          # Create the release empty, then upload assets one at a time. Doing
+          # both in one gh call has failed with a 404 from uploads.github.com
+          # partway through the asset list, leaving a release with only some of
+          # its files and no way to retry the rest.
+          # Deleting a tag does not delete its release -- GitHub turns the
+          # release into a draft. A re-cut tag therefore finds a stale draft
+          # here, and editing it would leave the release unpublished, which is
+          # invisible to anything reading the releases list.
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            if [ "$(gh release view "${TAG}" --json isDraft --jq .isDraft)" = "true" ]; then
+              echo "deleting stale draft release ${TAG}"
+              gh release delete "${TAG}" --yes
+              gh release create "${TAG}" \
+                --title "${TAG}" \
+                --notes-file release/RELEASE_NOTES.md
+            else
+              echo "release ${TAG} already published; updating it"
+              gh release edit "${TAG}" \
+                --title "${TAG}" \
+                --notes-file release/RELEASE_NOTES.md
+            fi
+          else
+            gh release create "${TAG}" \
+              --title "${TAG}" \
+              --notes-file release/RELEASE_NOTES.md
+          fi
+
+          # Drop whatever is already attached. A rerun then cannot inherit a
+          # stale asset from an earlier, differently-named build.
+          existing="$(gh release view "${TAG}" --json assets --jq '.assets[].name')"
+          for asset in ${existing}; do
+            echo "removing existing asset ${asset}"
+            gh release delete-asset "${TAG}" "${asset}" --yes
           done
-          gh release create "${TAG}" \
-            --title "${TAG}" \
-            --notes-file release/RELEASE_NOTES.md \
-            "${files[@]}"
+
+          for name in "${names[@]}"; do
+            path="release/${name}"
+            test -f "${path}" || { echo "missing asset: ${path}" >&2; exit 1; }
+            for attempt in 1 2 3; do
+              if gh release upload "${TAG}" "${path}" --clobber; then
+                echo "uploaded ${name}"
+                break
+              fi
+              if [ "${attempt}" = 3 ]; then
+                echo "giving up on ${name} after 3 attempts" >&2
+                exit 1
+              fi
+              echo "upload of ${name} failed; retrying in $((attempt * 5))s" >&2
+              sleep $((attempt * 5))
+            done
+          done
+
+          # Publish explicitly. A release that is still a draft is not in the
+          # releases list, so the Pages job would not find the tag it just built.
+          gh release edit "${TAG}" --draft=false --latest
+          echo "release state: $(gh release view "${TAG}" --json isDraft,isPrerelease --jq '"draft=\(.isDraft) prerelease=\(.isPrerelease)"')"
+
+          echo "assets now on the release:"
+          gh release view "${TAG}" --json assets \
+            --jq '.assets[] | "  \(.name) \(.size) bytes"'
+
+  # Rebuilds the whole dist/ tree from the releases every time, so the site is a
+  # derived view rather than state edited in place. Runs after the release job so
+  # a published site can never advertise a build that did not ship.
+  pages:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build the dist tree from the releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 scripts/build_dist.py \
+            --repo "${GITHUB_REPOSITORY}" \
+            --out _site/dist \
+            --retain 5 \
+            --require-tag "${GITHUB_REF_NAME}"
+
+      # The manual conversion page, at the site root. The spec leaves the root
+      # free for exactly this, and the page reads the manifest build_dist.py
+      # just mirrored -- the same file, fetched the same way, as any
+      # third-party installer. That is what makes this page a test of the
+      # distribution model and not merely a nicety beside it.
+      - name: Build the conversion page
+        run: |
+          set -euo pipefail
+          cd tools/extractor
+          MANIFEST_URL="dist/${GITHUB_REF_NAME}/manifest.json" ./build-page.sh
+          cp -r site/. "${GITHUB_WORKSPACE}/_site/"
+
+      # The page and the dist tree are built by different scripts and only meet
+      # here, so this is the first moment anything can tell whether they agree.
+      # It walks the page's own load path: config.json, the manifest it names,
+      # the module beside it, hashes, verifier.
+      - name: Check the assembled site
+        run: node tools/extractor/test-site.mjs _site
+
+      - name: Show what will be published
+        run: find _site -maxdepth 2 -printf "%P\n" | sort
+
+      # Pages must already be enabled on the repository (Settings -> Pages ->
+      # Source: GitHub Actions). `enablement: true` cannot do it: creating a
+      # Pages site needs repo-administration scope, which GITHUB_TOKEN lacks.
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

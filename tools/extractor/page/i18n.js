@@ -53,12 +53,13 @@ const en = {
     choose: "Choose file",
     none: "No file chosen",
     optional: "optional",
-    // Shown for a role the manifest marks repeatable, in place of its
-    // description: what the user gets for adding another one.
-    addLanguage: "+ Add language",
+    // The control on a role the manifest marks repeatable. Deliberately
+    // says nothing about what the extra files are: the role's own
+    // description, which the manifest owns, is right above it.
+    addFile: "+ Add another file",
     remove: "Remove",
     alreadyAdded: (name) => `${name} has already been added.`,
-    languageAlreadyAdded: (variant) => `${variant} is already added.`,
+    variantAlreadyAdded: (variant) => `${variant} is already added.`,
     wrongRole: (name, other, role) =>
       `${name} is the file for "${other}", not for "${role}".`,
     // Refusals. Each one names the file, says what was wanted, and gives the
@@ -86,6 +87,33 @@ const en = {
       `${pct}% · ${name} (step ${stage} of ${stages})`,
     timedOut: "This took too long and was stopped.",
     done: (n) => `Done, ${n} file${n === 1 ? "" : "s"} ready.`,
+    tooBig: (name, size, max) =>
+      `${name} came out at ${size} bytes, more than the ${max} its manifest allows.`,
+  },
+  version: {
+    label: "Version",
+    // A prerelease is opt-in: it is offered only once someone asks to see one.
+    showPrereleases: "Show pre-releases",
+    prerelease: "pre-release",
+    // The firmware requirement, shown per version because this is the only
+    // place a user learns it. A binary built for a newer ABI hardfaults on
+    // device with nothing on screen to explain why.
+    abi: (version, minSize) => `firmware ABI ${version}+ (${minSize} bytes)`,
+    retained: (n) => `Showing the ${n} most recent releases.`,
+    olderReleases: "Older releases",
+    pinned: (tag) => `Version ${tag}`,
+    noConverter: "This version needs no conversion: install the published files as they are.",
+  },
+  zip: {
+    button: "Download everything",
+    note: (names) => `One zip: ${names}`,
+    building: "Fetching the published files and packing them…",
+    ready: (name, bytes) => `${name} saved, ${bytes.toLocaleString("en-GB")} bytes.`,
+    failed: (msg) => `Could not build the zip: ${msg}`,
+    fetchFailed: (name, status) => `could not fetch ${name} (${status})`,
+    sizeMismatch: (name, got, want) =>
+      `${name} is ${got} bytes, but its manifest says ${want}`,
+    hashMismatch: (name) => `${name} does not match the hash in its manifest`,
   },
   results: {
     heading: "Output",
@@ -103,6 +131,7 @@ const en = {
   fatal: {
     cannotRun: (msg) => `This page cannot run: ${msg}`,
     noManifest: "the converter manifest could not be loaded",
+    noVersions: "this site publishes no versions",
     mismatch: "the converter does not match its manifest",
     unsafe: (errs) => `the converter failed its safety checks: ${errs}`,
   },
@@ -130,10 +159,10 @@ const fr = {
     choose: "Choisir un fichier",
     none: "Aucun fichier choisi",
     optional: "facultatif",
-    addLanguage: "+ Ajouter une langue",
+    addFile: "+ Ajouter un fichier",
     remove: "Retirer",
     alreadyAdded: (name) => `${name} a déjà été ajouté.`,
-    languageAlreadyAdded: (variant) => `${variant} est déjà ajouté.`,
+    variantAlreadyAdded: (variant) => `${variant} est déjà ajouté.`,
     wrongRole: (name, other, role) =>
       `${name} correspond à « ${other} », pas à « ${role} ».`,
     notTheOne: (name, variant, expected, actual) =>
@@ -158,6 +187,29 @@ const fr = {
       `${pct} % · ${name} (étape ${stage} sur ${stages})`,
     timedOut: "L'opération a pris trop de temps et a été interrompue.",
     done: (n) => `Terminé, ${n} fichier${n === 1 ? "" : "s"} prêt${n === 1 ? "" : "s"}.`,
+    tooBig: (name, size, max) =>
+      `${name} fait ${size} octets, plus que les ${max} autorisés par son manifeste.`,
+  },
+  version: {
+    label: "Version",
+    showPrereleases: "Afficher les préversions",
+    prerelease: "préversion",
+    abi: (version, minSize) => `ABI firmware ${version}+ (${minSize} octets)`,
+    retained: (n) => `Les ${n} versions les plus récentes.`,
+    olderReleases: "Versions plus anciennes",
+    pinned: (tag) => `Version ${tag}`,
+    noConverter: "Cette version ne demande aucune conversion : installez les fichiers publiés tels quels.",
+  },
+  zip: {
+    button: "Tout télécharger",
+    note: (names) => `Une archive : ${names}`,
+    building: "Récupération des fichiers publiés et création de l'archive…",
+    ready: (name, bytes) => `${name} enregistré, ${bytes.toLocaleString("fr-FR")} octets.`,
+    failed: (msg) => `Impossible de créer l'archive : ${msg}`,
+    fetchFailed: (name, status) => `${name} n'a pas pu être récupéré (${status})`,
+    sizeMismatch: (name, got, want) =>
+      `${name} fait ${got} octets alors que son manifeste en annonce ${want}`,
+    hashMismatch: (name) => `${name} ne correspond pas à l'empreinte de son manifeste`,
   },
   results: {
     heading: "Sortie",
@@ -175,6 +227,7 @@ const fr = {
   fatal: {
     cannotRun: (msg) => `Cette page ne peut pas fonctionner : ${msg}`,
     noManifest: "le manifeste du convertisseur n'a pas pu être chargé",
+    noVersions: "ce site ne publie aucune version",
     mismatch: "le convertisseur ne correspond pas à son manifeste",
     unsafe: (errs) => `le convertisseur a échoué aux contrôles de sécurité : ${errs}`,
   },
@@ -202,10 +255,10 @@ const de = {
     choose: "Datei auswählen",
     none: "Keine Datei ausgewählt",
     optional: "optional",
-    addLanguage: "+ Sprache hinzufügen",
+    addFile: "+ Weitere Datei hinzufügen",
     remove: "Entfernen",
     alreadyAdded: (name) => `${name} wurde schon hinzugefügt.`,
-    languageAlreadyAdded: (variant) => `${variant} ist schon dabei.`,
+    variantAlreadyAdded: (variant) => `${variant} ist schon dabei.`,
     wrongRole: (name, other, role) =>
       `${name} gehört zu „${other}“ und nicht zu „${role}“.`,
     notTheOne: (name, variant, expected, actual) =>
@@ -230,6 +283,29 @@ const de = {
       `${pct} % · ${name} (Schritt ${stage} von ${stages})`,
     timedOut: "Das hat zu lange gedauert und wurde abgebrochen.",
     done: (n) => `Fertig, ${n} Datei${n === 1 ? "" : "en"} bereit.`,
+    tooBig: (name, size, max) =>
+      `${name} ist ${size} Bytes groß, mehr als die im Manifest erlaubten ${max}.`,
+  },
+  version: {
+    label: "Version",
+    showPrereleases: "Vorabversionen anzeigen",
+    prerelease: "Vorabversion",
+    abi: (version, minSize) => `Firmware-ABI ${version}+ (${minSize} Bytes)`,
+    retained: (n) => `Die ${n} neuesten Versionen.`,
+    olderReleases: "Ältere Versionen",
+    pinned: (tag) => `Version ${tag}`,
+    noConverter: "Diese Version braucht keine Umwandlung: installiere die veröffentlichten Dateien so, wie sie sind.",
+  },
+  zip: {
+    button: "Alles herunterladen",
+    note: (names) => `Ein Archiv: ${names}`,
+    building: "Die veröffentlichten Dateien werden geholt und gepackt…",
+    ready: (name, bytes) => `${name} gespeichert, ${bytes.toLocaleString("de-DE")} Bytes.`,
+    failed: (msg) => `Das Archiv konnte nicht erstellt werden: ${msg}`,
+    fetchFailed: (name, status) => `${name} konnte nicht geladen werden (${status})`,
+    sizeMismatch: (name, got, want) =>
+      `${name} hat ${got} Bytes, das Manifest nennt aber ${want}`,
+    hashMismatch: (name) => `${name} passt nicht zur Prüfsumme im Manifest`,
   },
   results: {
     heading: "Ausgabe",
@@ -247,6 +323,7 @@ const de = {
   fatal: {
     cannotRun: (msg) => `Diese Seite funktioniert nicht: ${msg}`,
     noManifest: "das Manifest des Konverters konnte nicht geladen werden",
+    noVersions: "diese Seite veröffentlicht keine Versionen",
     mismatch: "der Konverter passt nicht zu seinem Manifest",
     unsafe: (errs) => `der Konverter hat die Sicherheitsprüfungen nicht bestanden: ${errs}`,
   },

@@ -56,6 +56,12 @@ jobs:
       - name: Verifier test suite
         run: node test.mjs
 
+      # The page is shared verbatim between projects and translated three ways,
+      # so a renamed string is the easiest thing to ship broken: the page still
+      # loads and the control is simply blank for that language.
+      - name: Page strings resolve in every locale
+        run: node test-i18n.mjs
+
       - name: Verify the built module
         run: node verify.mjs target/wasm32-unknown-unknown/release/zelda3_restool.wasm
 

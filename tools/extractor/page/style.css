@@ -178,3 +178,25 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
   max-width: 46rem;
 }
 .why[aria-expanded="true"] { border-color: var(--accent); color: var(--fg); }
+
+/* The version bar. A quiet row above the fold: which release this page is
+   converting against, and how to reach the ones it is not showing. */
+.version-bar {
+  display: flex; align-items: center; gap: .8rem; flex-wrap: wrap;
+  margin: 0 0 1.2rem; font-size: .85rem; color: var(--muted);
+}
+.version-bar label { color: var(--muted); }
+.version-select {
+  font: inherit; color: var(--fg); background: var(--card);
+  border: 1px solid var(--line); border-radius: 5px; padding: .2rem .4rem;
+}
+.version-select:disabled { opacity: .6; }
+.version-note { color: var(--muted); }
+.version-note a { color: var(--accent); }
+
+/* The whole install as one file, offered under the individual downloads. */
+.zip-wrap {
+  margin-top: 1.1rem; padding-top: .9rem; border-top: 1px solid var(--line);
+}
+.zip-note { margin: .45rem 0 0; font-size: .85rem; color: var(--muted);
+            word-break: break-word; }

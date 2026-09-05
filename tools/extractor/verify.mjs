@@ -53,6 +53,12 @@ export const DEFAULT_POLICY = {
   },
   allowImports: false,       // must import nothing at all
   allowStartSection: false,  // no code runs at instantiation time
+  // Per-project, and deliberately not shared. This must be at least what
+  // .cargo/config.toml lets the module declare, and no more than the project
+  // is willing to let it grow to. The other projects vendoring this file set
+  // their own number; converging them would either reject a module that is
+  // fine or wave through one that is not. make_manifest.py publishes this as
+  // limits.maxMemoryPages, so it is also what the manifest promises.
   maxMemoryPages: 1024,      // 64 MiB ceiling on declared memory growth;
                              // a measured peak is 84 pages (US) / 118 (US+de,fr)
   maxModuleBytes: 8 * 1024 * 1024,

@@ -125,16 +125,17 @@ def download(repo: str, tag: str, dest: Path) -> bool:
 def declared_files(manifest: dict) -> list[str]:
     """Every file the manifest names, in a stable order.
 
-    Including the ELF in symbols[], which is published but never installed: it
-    belongs in dist/<tag>/ so a crash can be symbolicated and so an offline
-    bundle carries it, and the mirror fetches every named file off the release.
+    Including the ELF in symbols[], which is published but never installed. The
+    mirror still has to carry it: the manifest names it, the spec's checker
+    verifies it is reachable, and an offline bundle is this directory zipped --
+    so a bundle without it cannot symbolicate a crash.
     """
     names = []
     for target in manifest["targets"]:
         for artifact in target["artifacts"]:
             names.append(artifact["url"])
-        for symbols in target.get("symbols", []):
-            names.append(symbols["url"])
+        for sym in target.get("symbols", []):
+            names.append(sym["url"])
     for tool in manifest["tools"]:
         names.append(tool["binary"]["url"])
     return sorted(set(names))

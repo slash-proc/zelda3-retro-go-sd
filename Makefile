@@ -74,7 +74,7 @@ PACKED_BIN := Zelda 3.bin
 RO_BIN     := zelda3.ro
 HB_NAME    := Zelda 3
 COVER_JPG  := $(BUILD_DIR)/cover.jpg
-COVER_SRC  := src/assets/cover_src.jpg
+COVER_SRC  := src/assets/cover_src.png
 
 include $(GNW_CORE_SDK)/Makefile
 
@@ -126,12 +126,17 @@ pack: $(TARGET_BIN) $(RO_BIN) $(COVER_JPG)
 
 all: pack
 
-.PHONY: print-PROJECT_KIND print-PACKED_BIN print-CORE_NAME print-DOCKER_IMAGE \
-	print-TARGET_ELF print-TARGET_MAP print-CORE_VERSION print-RO_BIN
+.PHONY: print-PROJECT_KIND print-PACKED_BIN print-RO_BIN print-CORE_NAME print-DOCKER_IMAGE \
+	print-TARGET_ELF print-TARGET_MAP print-CORE_VERSION
 print-PROJECT_KIND:
 	@echo $(PROJECT_KIND)
 print-PACKED_BIN:
 	@echo $(PACKED_BIN)
+# The second device file. Unlike every other project so far, this homebrew
+# installs two artifacts: the packed binary and the read-only data it reads
+# from the card at run time.
+print-RO_BIN:
+	@echo $(RO_BIN)
 print-CORE_NAME:
 	@echo $(CORE_NAME)
 print-DOCKER_IMAGE:
@@ -142,11 +147,6 @@ print-TARGET_MAP:
 	@echo $(BUILD_DIR)/$(CORE_NAME)_core.map
 print-CORE_VERSION:
 	@echo $(CORE_VERSION)
-# The second device file. Unlike every other project so far, this homebrew
-# installs two artifacts: the packed binary and the read-only data it reads
-# from the card at run time.
-print-RO_BIN:
-	@echo $(RO_BIN)
 
 clean::
 	$(V)rm -f "$(PACKED_BIN)" $(RO_BIN) $(COVER_JPG)

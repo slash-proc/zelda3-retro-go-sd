@@ -152,7 +152,6 @@
           "de": "Ressourcenpaket"
         }
       }
-    ],
-    "hashesDeclaredIn": "tools/extractor/src/rom.rs"
+    ]
   }
 }

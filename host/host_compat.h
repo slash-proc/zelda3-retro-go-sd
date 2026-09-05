@@ -23,6 +23,10 @@ void gw_core_bridge_init(void);
 void host_set_rom_path(const char *path);
 int host_poll_events(void); /* returns 0 if the window should quit */
 
+/* Map a firmware SD absolute path (/homebrews/…) to a host filesystem path.
+ * Uses $HOST_SD as the SD root when set; otherwise prefixes "./". */
+int host_map_sd_path(const char *sd_path, char *out, size_t out_sz);
+
 #ifdef __cplusplus
 }
 #endif

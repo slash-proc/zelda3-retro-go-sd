@@ -75,9 +75,37 @@ static int32_t settings_beep = 1;
 static state_handler_t host_load_state_cb;
 static state_handler_t host_save_state_cb;
 static const int host_default_slot = 0;
+static uint8_t *host_flash_cache;
 
 bool odroid_system_emu_load_state(int slot);
 bool odroid_system_emu_save_state(int slot);
+
+int host_map_sd_path(const char *sd_path, char *out, size_t out_sz)
+{
+    const char *root;
+
+    if (!sd_path || !sd_path[0] || !out || out_sz == 0)
+        return -1;
+
+    root = getenv("HOST_SD");
+    if (root && root[0]) {
+        size_t root_len = strlen(root);
+        while (root_len > 0 && (root[root_len - 1] == '/' || root[root_len - 1] == '\\'))
+            root_len--;
+        if (sd_path[0] == '/' || sd_path[0] == '\\')
+            snprintf(out, out_sz, "%.*s%s", (int)root_len, root, sd_path);
+        else
+            snprintf(out, out_sz, "%.*s/%s", (int)root_len, root, sd_path);
+        return 0;
+    }
+
+    /* No HOST_SD: treat leading '/' as relative to cwd (./homebrews/…). */
+    if (sd_path[0] == '/' || sd_path[0] == '\\')
+        snprintf(out, out_sz, ".%s", sd_path);
+    else
+        snprintf(out, out_sz, "%s", sd_path);
+    return 0;
+}
 
 /* Tiny 8x8 font for ASCII 32..127 (bit0 = left). */
 static const uint8_t font8x8_basic[96][8] = {
@@ -188,8 +216,10 @@ void gw_core_bridge_init(void)
     memset(&host_pad, 0, sizeof(host_pad));
     memset(&host_active_file, 0, sizeof(host_active_file));
 #if defined(PROJECT_KIND_HOMEBREW)
-    strncpy(host_active_file.name, "ExampleHB.bin", sizeof(host_active_file.name) - 1);
-    strncpy(host_active_file.path, "ExampleHB.bin", sizeof(host_active_file.path) - 1);
+    strncpy(host_active_file.name, "Zelda 3.bin",
+            sizeof(host_active_file.name) - 1);
+    strncpy(host_active_file.path, "Zelda 3.bin",
+            sizeof(host_active_file.path) - 1);
 #else
     strncpy(host_active_file.name, "(no rom)", sizeof(host_active_file.name) - 1);
 #endif
@@ -616,14 +646,97 @@ int odroid_overlay_confirm(const char *text, bool yes_selected, void_callback_t 
 }
 void odroid_overlay_alert(const char *text) { (void)text; }
 
+static FILE *host_fopen_sd(const char *file_path)
+{
+    char mapped[1024];
+    FILE *f;
+
+    if (!file_path || !file_path[0])
+        return NULL;
+
+    if ((file_path[0] == '/' || file_path[0] == '\\') &&
+        host_map_sd_path(file_path, mapped, sizeof(mapped)) == 0) {
+        f = fopen(mapped, "rb");
+        if (f)
+            return f;
+        /* Fallbacks when the SD-style path is missing locally. */
+        {
+            const char *base = strrchr(file_path, '/');
+#ifdef _WIN32
+            const char *base2 = strrchr(file_path, '\\');
+            if (base2 && (!base || base2 > base))
+                base = base2;
+#endif
+            if (base && base[1]) {
+                f = fopen(base + 1, "rb");
+                if (f)
+                    return f;
+            }
+        }
+    }
+
+    return fopen(file_path, "rb");
+}
+
 uint8_t *odroid_overlay_cache_file_in_flash(const char *file_path, uint32_t *file_size_p,
                                             bool byte_swap)
 {
-    (void)file_path;
+    FILE *f;
+    long sz;
+    uint8_t *buf;
+    size_t n, i;
+
     (void)byte_swap;
     if (file_size_p)
         *file_size_p = 0;
-    return NULL;
+    if (!file_path || !file_path[0])
+        return NULL;
+
+    f = host_fopen_sd(file_path);
+    if (!f) {
+        fprintf(stderr, "host: cannot open %s (set HOST_SD or place file under ./homebrews/)\n",
+                file_path);
+        return NULL;
+    }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    sz = ftell(f);
+    if (sz <= 0) {
+        fclose(f);
+        return NULL;
+    }
+    rewind(f);
+
+    buf = (uint8_t *)malloc((size_t)sz);
+    if (!buf) {
+        fclose(f);
+        fprintf(stderr, "host: malloc(%ld) failed for %s\n", sz, file_path);
+        return NULL;
+    }
+    n = fread(buf, 1, (size_t)sz, f);
+    fclose(f);
+    if (n != (size_t)sz) {
+        free(buf);
+        fprintf(stderr, "host: short read %s (%zu / %ld)\n", file_path, n, sz);
+        return NULL;
+    }
+
+    if (byte_swap) {
+        for (i = 0; i + 1 < n; i += 2) {
+            uint8_t t = buf[i];
+            buf[i] = buf[i + 1];
+            buf[i + 1] = t;
+        }
+    }
+
+    free(host_flash_cache);
+    host_flash_cache = buf;
+    if (file_size_p)
+        *file_size_p = (uint32_t)n;
+    printf("host: cached %s (%zu bytes)\n", file_path, n);
+    return buf;
 }
 
 size_t odroid_overlay_cache_file_in_ram(const char *file_path, uint8_t *dest_address)
@@ -633,7 +746,7 @@ size_t odroid_overlay_cache_file_in_ram(const char *file_path, uint8_t *dest_add
 
     if (!file_path || !dest_address)
         return 0;
-    f = fopen(file_path, "rb");
+    f = host_fopen_sd(file_path);
     if (!f)
         return 0;
     n = fread(dest_address, 1, host_active_file.size ? host_active_file.size : ram_get_free_size(), f);
@@ -726,6 +839,59 @@ void odroid_system_get_save_path(char *path, size_t size, int slot)
     if (slot < 0)
         slot = 0;
     snprintf(path, size, "host_saves/%s.slot%d.sav", stem, slot);
+}
+
+/* Caller frees (firmware malloc). */
+char *odroid_system_get_path(emu_path_type_t type, const char *romPath)
+{
+    char *path = (char *)malloc(512);
+    char stem[64];
+    const char *name = romPath;
+
+    if (!path)
+        return NULL;
+    if (name && name[0]) {
+        const char *base = strrchr(name, '/');
+#ifdef _WIN32
+        const char *base2 = strrchr(name, '\\');
+        if (base2 && (!base || base2 > base))
+            base = base2;
+#endif
+        name = base ? base + 1 : name;
+    } else if (ACTIVE_FILE && ACTIVE_FILE->name[0]) {
+        name = ACTIVE_FILE->name;
+    } else {
+        name = "host";
+    }
+    host_sanitize_stem(stem, sizeof(stem), name);
+
+    switch (type) {
+    case ODROID_PATH_SAVE_SRAM:
+        snprintf(path, 512, "host_saves/%s.sram", stem);
+        break;
+    case ODROID_PATH_SAVE_STATE:
+    case ODROID_PATH_SAVE_STATE_1:
+        snprintf(path, 512, "host_saves/%s.slot0.sav", stem);
+        break;
+    case ODROID_PATH_SAVE_STATE_2:
+        snprintf(path, 512, "host_saves/%s.slot1.sav", stem);
+        break;
+    case ODROID_PATH_SAVE_STATE_3:
+        snprintf(path, 512, "host_saves/%s.slot2.sav", stem);
+        break;
+    default:
+        snprintf(path, 512, "host_saves/%s.path%d", stem, (int)type);
+        break;
+    }
+    return path;
+}
+
+bool get_ofw_is_mario(void)
+{
+    const char *v = getenv("HOST_OFW_MARIO");
+    if (v && v[0] && strcmp(v, "0") != 0)
+        return true;
+    return false; /* default Zelda face layout */
 }
 
 static int host_ensure_save_dir(void)

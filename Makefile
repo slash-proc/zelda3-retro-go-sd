@@ -1,157 +1,146 @@
-# Retro-Go SD template — one project = one CORE or one GWHB homebrew.
+# Zelda 3 (A Link to the Past) — Retro-Go SD GWHB homebrew
 #
-#   make                  — build + pack (default: PROJECT_KIND=core)
-#   make PROJECT_KIND=homebrew
-#   make host             — Linux/macOS SDL binary (same src/main.c)
-#   make host HOST_SDL=3  — same with SDL3
-#   make docker           — same build inside Docker (no host toolchain)
-#   make docker_shell     — interactive shell in the builder image
+#   make                        — build + pack Zelda 3.bin (+ zelda3.ro)
+#   make docker                 — same inside the builder image
+#   make host                   — SDL2 desktop preview (zelda3_host)
 #
-# Customize CORE_NAME / pack metadata below, then replace src/main.c.
+# Sidecars on SD (not in the GWHB):
+#   /homebrews/zelda3.ro
+#   /homebrews/zelda3_assets.dat
+# Build assets from a Zelda3 ROM via external/zelda3 (see README).
 # Verbose compiler lines: make V=
 
 #######################################
 # Project identity
 #######################################
-# core     → pack_core.py     → /cores/<name>.bin
-# homebrew → pack_homebrew.py → /homebrews/<name>.bin
-PROJECT_KIND ?= core
+PROJECT_KIND ?= homebrew
 
-CORE_NAME  := example
+CORE_NAME  := zelda3
 CORE_ENTRY := app_main
 
-CORE_C_SOURCES := \
-src/main.c
+CORE_ZELDA3 := external/zelda3
 
-# Relative path so Docker bind-mounts work (do NOT use $(abspath) — it
-# bakes the host path into Make prerequisites / .d files). Do not name
-# this SDK_ROOT: that env var is commonly set by Android SDK installs.
+# Firmware-local tweak: SpcPlayer is too large for the AHB heap budget —
+# allocate from DTCM (same as game-and-watch-retro-go-sd working tree).
+ZELDA3_SPC_PATCH := patches/spc_player_dtc_malloc.patch
+ZELDA3_SPC_PATCH_STAMP := $(CORE_ZELDA3)/.patched_dtc_malloc
+
+CORE_C_SOURCES := \
+$(CORE_ZELDA3)/zelda_rtl.c \
+$(CORE_ZELDA3)/misc.c \
+$(CORE_ZELDA3)/nmi.c \
+$(CORE_ZELDA3)/poly.c \
+$(CORE_ZELDA3)/attract.c \
+$(CORE_ZELDA3)/snes/ppu.c \
+$(CORE_ZELDA3)/snes/dma.c \
+$(CORE_ZELDA3)/spc_player.c \
+$(CORE_ZELDA3)/util.c \
+$(CORE_ZELDA3)/audio.c \
+$(CORE_ZELDA3)/overworld.c \
+$(CORE_ZELDA3)/ending.c \
+$(CORE_ZELDA3)/select_file.c \
+$(CORE_ZELDA3)/dungeon.c \
+$(CORE_ZELDA3)/messaging.c \
+$(CORE_ZELDA3)/hud.c \
+$(CORE_ZELDA3)/load_gfx.c \
+$(CORE_ZELDA3)/ancilla.c \
+$(CORE_ZELDA3)/player.c \
+$(CORE_ZELDA3)/sprite.c \
+$(CORE_ZELDA3)/player_oam.c \
+$(CORE_ZELDA3)/snes/dsp.c \
+$(CORE_ZELDA3)/sprite_main.c \
+$(CORE_ZELDA3)/tagalong.c \
+$(CORE_ZELDA3)/third_party/opus-1.3.1-stripped/opus_decoder_amalgam.c \
+$(CORE_ZELDA3)/tile_detect.c \
+$(CORE_ZELDA3)/overlord.c \
+src/main_zelda3.c
+
+CORE_C_INCLUDES := \
+-Isrc \
+-I$(CORE_ZELDA3) \
+-Iexternal
+
+# Defaults match firmware Makefile.common classic Zelda3 build.
+# FEATURES bit7 = SKIP_INTRO_ON_KEYPRESS (default on).
+CORE_C_DEFS := \
+-DPROJECT_KIND_HOMEBREW=1 \
+-DHEADLESS \
+-DLIMIT_30FPS=1 \
+-DFASTER_UI=1 \
+-DBATTERY_INDICATOR=1 \
+-DFEATURES=128
+
 GNW_CORE_SDK ?= sdk
-# Separate build trees so switching PROJECT_KIND does not reuse stale .o.
 BUILD_DIR ?= build/$(PROJECT_KIND)
 
-#######################################
-# SDK bridge overrides (optional)
-#######################################
-# The SDK bridge (gw_core_bridge.c) provides default implementations for
-# memcpy/memset/memmove/__aeabi_mem* and malloc/calloc/free/realloc.
-# Define these to exclude the SDK versions and supply your own:
-#
-#   GW_CORE_BRIDGE_DISABLE_SDK_MEMCPY — exclude memcpy only.
-#       Memmove stays routed through the SDK bridge (Doom/fastmem needs it).
-#
-#   GW_CORE_BRIDGE_DISABLE_SDK_MEMSET — exclude memset only.
-#
-#   GW_CORE_BRIDGE_DISABLE_SDK_MEMMOVE — exclude memmove too (requires your
-#       core to provide memmove).
-#
-#   GW_CORE_BRIDGE_DISABLE_SDK_MEMOPS — back-compat: exclude the full memops
-#       block (memcpy/memset/memmove + all __aeabi_mem* helpers).
-#
-#   GW_CORE_BRIDGE_DISABLE_SDK_MALLOC — exclude the malloc/calloc/free/
-#       realloc wrappers that forward to the firmware ABI heap. Use this when
-#       the core links its own allocator or needs a custom malloc/free path.
-#
-# To enable, add the define(s) to CORE_C_DEFS below, e.g.:
-#   CORE_C_DEFS += -DGW_CORE_BRIDGE_DISABLE_SDK_MEMCPY
-#   CORE_C_DEFS += -DGW_CORE_BRIDGE_DISABLE_SDK_MEMSET
-#   CORE_C_DEFS += -DGW_CORE_BRIDGE_DISABLE_SDK_MALLOC
+CORE_LDSCRIPT := src/zelda3_core.ld
 
-#######################################
-# Kind-specific compile defs + packing
-#######################################
-ifeq ($(PROJECT_KIND),core)
-# Match release-firmware layout of retro_emulator_file_t: COVERFLOW fields
-# sit before cheat_* — CHEAT_CODES alone with COVERFLOW=0 misaligns pointers.
-# MAX_CHEAT_CODES mirrors Makefile.common's release default.
-CORE_C_DEFS := \
--DPROJECT_KIND_CORE=1 \
--DCOVERFLOW=1 \
--DCHEAT_CODES=1 \
--DMAX_CHEAT_CODES=13
-
-PACKED_BIN  := $(CORE_NAME).bin
-PAD_LOGO    := src/assets/pad.png
-HEADER_LOGO := src/assets/header.png
-
-else ifeq ($(PROJECT_KIND),homebrew)
-CORE_C_DEFS := \
--DPROJECT_KIND_HOMEBREW=1
-
-PACKED_BIN := ExampleHB.bin
-HB_NAME    := Example Homebrew
-# Compact coverflow tile (HW max is 186x100 — do not use full width by default).
-COVER_JPG    := $(BUILD_DIR)/cover.jpg
-COVER_WIDTH  ?= 128
-COVER_HEIGHT ?= 96
-
-else
-$(error PROJECT_KIND must be 'core' or 'homebrew' (got '$(PROJECT_KIND)'))
-endif
+PACKED_BIN := Zelda 3.bin
+RO_BIN     := zelda3.ro
+HB_NAME    := Zelda 3
+COVER_JPG  := $(BUILD_DIR)/cover.jpg
+COVER_SRC  := src/assets/cover_src.jpg
 
 include $(GNW_CORE_SDK)/Makefile
 
-PACK_CORE     := $(GNW_CORE_SDK)/tools/pack_core.py
+# Ensure the SpcPlayer DTCM patch is applied before compiling that unit.
+$(ZELDA3_SPC_PATCH_STAMP): $(ZELDA3_SPC_PATCH) $(CORE_ZELDA3)/spc_player.c
+	$(V)$(ECHO) [ PATCH ] spc_player.c → dtc_malloc
+	$(V)cd $(CORE_ZELDA3) && git apply --check ../$(ZELDA3_SPC_PATCH) 2>/dev/null \
+		&& git apply ../$(ZELDA3_SPC_PATCH) || true
+	$(V)grep -q 'dtc_malloc(sizeof(SpcPlayer))' $(CORE_ZELDA3)/spc_player.c
+	$(V)touch $@
+
+$(BUILD_DIR)/spc_player.o: $(ZELDA3_SPC_PATCH_STAMP)
+
 PACK_HOMEBREW := $(GNW_CORE_SDK)/tools/pack_homebrew.py
-GEN_COVER     := scripts/gen_homebrew_cover.py
+
+# Upstream warn suppressions (mirrors cores/zelda3/Makefile).
+ZELDA3_WARN_OFF := -Wno-parentheses -Wno-unknown-pragmas -Wno-incompatible-pointer-types \
+	-Wno-unused-const-variable -Wno-strict-aliasing -Wno-comment -Wno-unused-function \
+	-Wno-stack-usage -Wno-int-in-bool-context -Wno-unused-variable -Wno-unused-but-set-variable
+CFLAGS += $(ZELDA3_WARN_OFF) -std=gnu11
+ASFLAGS += -std=gnu11
 
 #######################################
 # Packed header version
 #######################################
-# gnw_core_meta_t / gwhb_meta_t only store major.minor.patch (0..255).
-# CORE_VERSION is the full git describe string passed to the packers; they
-# extract the leading vX.Y.Z (NOTAG / missing tags → 0.0.0).
-# Override: make CORE_VERSION=v1.2.3
 CORE_VERSION ?= $(shell git describe --tags --dirty 2>/dev/null || echo NOTAG)
 
 #######################################
-# Pack
+# Pack (+ extract .rodata_zelda3 sidecar)
 #######################################
 .PHONY: pack cover
 
-ifeq ($(PROJECT_KIND),core)
-
-pack: $(TARGET_BIN) $(PAD_LOGO) $(HEADER_LOGO)
-	$(V)$(ECHO) [ PACK CORE ] $(PACKED_BIN) version=$(CORE_VERSION)
-	$(V)python3 $(PACK_CORE) \
-		--elf $(TARGET_ELF) --bin $(TARGET_BIN) \
-		--system-name "Example Core" --dirname example \
-		--extensions "bin" \
-		--core-name "Example" \
-		--version "$(CORE_VERSION)" \
-		--cheat-ext ggcodes \
-		--pad-logo $(PAD_LOGO) \
-		--header-logo $(HEADER_LOGO) \
-		--out $(PACKED_BIN)
-
-else
-
-.PHONY: cover
 cover: $(COVER_JPG)
 
-# Must stay ≤ gui.c COVER_MAX_WIDTH x COVER_MAX_HEIGHT (186x100) and
-# COVER_SIZE (10 KiB) — oversized covers smash the HW JPEG scratch.
-$(COVER_JPG): $(GEN_COVER)
-	$(V)$(ECHO) [ COVER ] $(COVER_JPG) ($(COVER_WIDTH)x$(COVER_HEIGHT))
-	$(V)python3 $(GEN_COVER) \
-		--out $(COVER_JPG) \
-		--title "$(HB_NAME)" \
-		--width $(COVER_WIDTH) \
-		--height $(COVER_HEIGHT)
+# Must stay ≤ gui.c COVER_MAX (186×100) and COVER_SIZE (10 KiB).
+$(COVER_JPG): $(COVER_SRC)
+	$(V)$(ECHO) [ COVER ] $(COVER_JPG)
+	$(V)mkdir -p $(BUILD_DIR)
+	$(V)python3 -c "from pathlib import Path; from PIL import Image; \
+img=Image.open('$(COVER_SRC)').convert('RGB'); \
+img.thumbnail((186,100)); \
+img.save('$(COVER_JPG)', 'JPEG', quality=85, optimize=True); \
+sz=Path('$(COVER_JPG)').stat().st_size; \
+assert sz <= 10*1024, f'cover too big: {sz}'; \
+w,h=img.size; assert w<=186 and h<=100, (w,h)"
 
-pack: $(TARGET_BIN) $(COVER_JPG)
-	$(V)$(ECHO) [ PACK GWHB ] $(PACKED_BIN) version=$(CORE_VERSION)
+$(RO_BIN): $(TARGET_ELF)
+	$(V)$(ECHO) [ RO ] $(RO_BIN)
+	$(V)$(CP) -O binary --only-section=.rodata_zelda3 $< $@
+	$(V)$(SZ) --target=binary $@
+
+pack: $(TARGET_BIN) $(RO_BIN) $(COVER_JPG)
+	$(V)$(ECHO) [ PACK GWHB ] "$(PACKED_BIN)" version=$(CORE_VERSION)
 	$(V)python3 $(PACK_HOMEBREW) \
 		--elf $(TARGET_ELF) --bin $(TARGET_BIN) \
 		--name "$(HB_NAME)" --version "$(CORE_VERSION)" \
 		--cover $(COVER_JPG) \
-		--out $(PACKED_BIN)
-
-endif
+		--out "$(PACKED_BIN)"
 
 all: pack
 
-# Read-only helpers for CI / scripts (make print-PROJECT_KIND, etc.).
 .PHONY: print-PROJECT_KIND print-PACKED_BIN print-CORE_NAME print-DOCKER_IMAGE \
 	print-TARGET_ELF print-TARGET_MAP print-CORE_VERSION
 print-PROJECT_KIND:
@@ -170,10 +159,7 @@ print-CORE_VERSION:
 	@echo $(CORE_VERSION)
 
 clean::
-	$(V)rm -f $(PACKED_BIN)
-ifeq ($(PROJECT_KIND),homebrew)
-	$(V)rm -f $(COVER_JPG)
-endif
+	$(V)rm -f "$(PACKED_BIN)" $(RO_BIN) $(COVER_JPG)
 
 #######################################
 # Docker (same image as firmware repo)
@@ -185,7 +171,6 @@ DOCKER_REPOSITORY ?= sylverb/retro-go-sd-builder
 DOCKER_IMAGE ?= $(DOCKER_REPOSITORY):$(RELEASE_VERSION)
 
 DOCKER_TTY_FLAG := $(shell if [ -t 0 ]; then echo -it; else echo; fi)
-# Host UID so build/ artifacts are not root-owned on the bind mount.
 DOCKER_USER := $(shell id -u):$(shell id -g)
 DOCKER_RUN := docker run --rm $(DOCKER_TTY_FLAG) \
 	--user $(DOCKER_USER) \
@@ -193,8 +178,6 @@ DOCKER_RUN := docker run --rm $(DOCKER_TTY_FLAG) \
 	-w /opt/workdir \
 	$(DOCKER_IMAGE)
 
-# Compile inside the published builder image (uses the local copy).
-# Refresh with `make docker_pull` when you want a newer digest for the tag.
 docker:
 	$(V)$(ECHO) "[ DOCKER ]" $(DOCKER_IMAGE) "PROJECT_KIND=$(PROJECT_KIND)"
 	$(V)$(DOCKER_RUN) make --no-print-directory -j$$(nproc) PROJECT_KIND=$(PROJECT_KIND)
@@ -203,7 +186,6 @@ docker_pull:
 	$(V)$(ECHO) "[ PULL ]" $(DOCKER_IMAGE)
 	$(V)docker pull $(DOCKER_IMAGE)
 
-# Interactive shell with the same image / mount as `make docker`.
 docker_shell:
 	$(DOCKER_RUN) bash
 

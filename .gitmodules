@@ -1,0 +1,4 @@
+[submodule "external/zelda3"]
+	path = external/zelda3
+	url = https://github.com/sylverb/zelda3.git
+	branch = sd

@@ -67,7 +67,10 @@ def read_make_vars() -> dict[str, str]:
     if proc.stderr:
         sys.stderr.write(proc.stderr)
 
-    values = [line for line in proc.stdout.splitlines() if line.strip()]
+    # Positional, and blank lines are kept: a variable a project does not set
+    # -- RO_BIN in anything but Zelda 3 -- prints as an empty line, and
+    # dropping it would shift every value after it onto the wrong name.
+    values = proc.stdout.splitlines()
     # Defensive: if anything else leaked to stdout, keep the last N lines.
     if len(values) > len(MAKE_VARS):
         values = values[-len(MAKE_VARS) :]

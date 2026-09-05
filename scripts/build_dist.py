@@ -147,7 +147,7 @@ def manifest_problem(manifest: dict) -> str | None:
                 return f"artifact has fields the spec removed: {', '.join(sorted(extra))}"
     for tool in manifest.get("tools", []):
         for output in tool.get("outputs", []):
-            extra = set(output) - {"id", "filename", "maxBytes"}
+            extra = set(output) - {"id", "filename", "maxBytes", "label", "description"}
             if extra:
                 return f"output has fields the spec removed: {', '.join(sorted(extra))}"
         for inp in tool.get("inputs", []):

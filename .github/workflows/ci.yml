@@ -329,7 +329,10 @@ jobs:
         run: |
           set -euo pipefail
           cd tools/extractor
-          MANIFEST_URL="dist/${GITHUB_REF_NAME}/manifest.json" ./build-page.sh
+          # No MANIFEST_URL: setting it pins the page to one version and hides
+          # the picker. The published page reads the index instead, so it offers
+          # every version this mirror holds and a release needs no redeploy.
+          VERSIONS_URL="dist/versions.json" ./build-page.sh
           cp -r site/. "${GITHUB_WORKSPACE}/_site/"
 
       # The page and the dist tree are built by different scripts and only meet

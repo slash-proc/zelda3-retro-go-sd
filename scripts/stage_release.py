@@ -3,7 +3,7 @@
 
 Reads PROJECT_KIND and PACKED_BIN from the root Makefile, builds:
   1. SD install zip:   <stem>-<tag>.zip       → homebrews|cores/<packed.bin>
-                                               (+ optional RO_BIN sidecar)
+                                               (+ any SIDECARS)
   2. Debug symbols zip: <stem>-<tag>-debug.zip → ELF, map, README
 
 Extracts release notes from CHANGELOG.md for the requested tag.
@@ -32,6 +32,7 @@ DEBUG_README = ROOT / "scripts" / "DEBUG_README.md"
 MAKE_VARS = (
     "PROJECT_KIND",
     "PACKED_BIN",
+    "SIDECARS",
     "RO_BIN",
     "CORE_NAME",
     "DOCKER_IMAGE",
@@ -70,8 +71,8 @@ def read_make_vars() -> dict[str, str]:
         sys.stderr.write(proc.stderr)
 
     # Positional, and blank lines are kept: a variable a project does not set
-    # -- RO_BIN in anything but Zelda 3 -- prints as an empty line, and
-    # dropping it would shift every value after it onto the wrong name.
+    # -- SIDECARS in most projects -- prints as an empty line, and dropping it
+    # would shift every value after it onto the wrong name.
     values = proc.stdout.splitlines()
     # Defensive: if anything else leaked to stdout, keep the last N lines.
     if len(values) > len(MAKE_VARS):
@@ -81,6 +82,23 @@ def read_make_vars() -> dict[str, str]:
             f"expected {len(MAKE_VARS)} Makefile values, got {len(values)}:\n{proc.stdout}"
         )
     return dict(zip(MAKE_VARS, values, strict=True))
+
+
+def resolve_sidecars(cfg: dict[str, str], explicit: list[str] | None) -> list[str]:
+    """Extra device files installed beside the packed binary, in declared order.
+
+    SIDECARS is a space-separated list. RO_BIN is the older single-slot spelling
+    and still works: it was named for Zelda 3's .rodata dump, but gba puts an
+    execute-in-place blob through it, PICO-8 needs two files and a Quake port
+    needs one per level -- so the name was wrong and one slot was not enough.
+    """
+    if explicit:
+        return list(explicit)
+    names = (cfg.get("SIDECARS") or "").split()
+    if names:
+        return names
+    legacy = (cfg.get("RO_BIN") or "").strip()
+    return [legacy] if legacy else []
 
 
 def sd_subdir(project_kind: str) -> str:
@@ -129,7 +147,7 @@ def build_release_notes(
     docker_image: str,
     archive_name: str,
     debug_archive_name: str,
-    ro_name: str | None = None,
+    sidecar_names: list[str] | None = None,
 ) -> str:
     sdk_version = (ROOT / "SDK_VERSION").read_text(encoding="utf-8").strip()
     install_path = f"/{sd_dir}/{packed_name}"
@@ -145,8 +163,10 @@ def build_release_notes(
         f"- Packed binary: `{packed_name}`",
         f"- SD install path: `{install_path}`",
     ]
-    if ro_name:
-        lines.append(f"- Rodata sidecar: `/{sd_dir}/{ro_name}` (included in the install zip)")
+    # Named, not described: this used to say "Rodata sidecar" for every file,
+    # which was a lie the moment gba put a .xip through the same slot.
+    for name in sidecar_names or []:
+        lines.append(f"- Also installed: `/{sd_dir}/{name}` (included in the install zip)")
     lines.extend(
         [
             f"- Release archive: `{archive_name}` (unzip onto the SD root)",
@@ -197,12 +217,12 @@ def stage_release(
     docker_image: str | None,
     elf_path: Path | None,
     map_path: Path | None,
-    ro_path: Path | None,
+    sidecar_paths: list[Path] | None,
 ) -> None:
     cfg = read_make_vars()
     project_kind = cfg["PROJECT_KIND"]
     packed_name = cfg["PACKED_BIN"]
-    ro_name = (cfg.get("RO_BIN") or "").strip()
+    sidecar_names = resolve_sidecars(cfg, [p.name for p in sidecar_paths or []])
     core_name = cfg["CORE_NAME"]
     resolved_docker = docker_image or cfg.get("DOCKER_IMAGE") or "sylverb/retro-go-sd-builder:v1.5"
 
@@ -223,16 +243,15 @@ def stage_release(
     if not DEBUG_README.is_file():
         raise SystemExit(f"debug readme not found: {DEBUG_README}")
 
-    sd_ro: Path | None = None
-    if ro_name:
-        resolved_ro = ro_path or (ROOT / ro_name)
-        if not resolved_ro.is_absolute():
-            resolved_ro = ROOT / resolved_ro
-        if not resolved_ro.is_file():
-            raise SystemExit(
-                f"rodata sidecar RO_BIN={ro_name!r} not found: {resolved_ro}"
-            )
-        sd_ro = resolved_ro
+    explicit = {p.name: p for p in sidecar_paths or []}
+    resolved_sidecars: list[tuple[str, Path]] = []
+    for name in sidecar_names:
+        src = explicit.get(name) or (ROOT / name)
+        if not src.is_absolute():
+            src = ROOT / src
+        if not src.is_file():
+            raise SystemExit(f"sidecar {name!r} not found: {src}")
+        resolved_sidecars.append((name, src))
 
     changelog_body = extract_changelog_section(changelog_path, tag)
 
@@ -253,15 +272,15 @@ def stage_release(
     shutil.copy2(bin_path, flat_files[0])
 
     zip_members: list[tuple[Path, str]] = [(sd_bin, f"{sd_dir}/{packed_name}")]
-    if sd_ro is not None and ro_name:
-        staged_ro = sd_root / ro_name
-        shutil.copy2(sd_ro, staged_ro)
-        zip_members.append((staged_ro, f"{sd_dir}/{ro_name}"))
-        # The sidecar is an artifact in its own right: the manifest declares it
+    for name, src in resolved_sidecars:
+        staged = sd_root / name
+        shutil.copy2(src, staged)
+        zip_members.append((staged, f"{sd_dir}/{name}"))
+        # Each sidecar is an artifact in its own right: the manifest declares it
         # with its own hash, so the mirror must be able to fetch it loose too.
-        flat_ro = out_dir / ro_name
-        shutil.copy2(sd_ro, flat_ro)
-        flat_files.append(flat_ro)
+        flat = out_dir / name
+        shutil.copy2(src, flat)
+        flat_files.append(flat)
 
     stem = Path(packed_name).stem
     tag_slug = slug(tag)
@@ -293,7 +312,7 @@ def stage_release(
             docker_image=resolved_docker,
             archive_name=archive_name,
             debug_archive_name=debug_archive_name,
-            ro_name=ro_name or None,
+            sidecar_names=sidecar_names,
         ),
         encoding="utf-8",
     )
@@ -311,9 +330,12 @@ def stage_release(
     print(f"project_kind={project_kind}")
     print(f"packed_bin={packed_name}")
     print(f"sd_path=/{sd_dir}/{packed_name}")
-    if ro_name:
-        print(f"ro_bin={ro_name}")
-        print(f"ro_path=/{sd_dir}/{ro_name}")
+    if sidecar_names:
+        print(f"sidecars={' '.join(sidecar_names)}")
+        # Kept for callers written against the single-slot spelling.
+        if len(sidecar_names) == 1:
+            print(f"ro_bin={sidecar_names[0]}")
+            print(f"ro_path=/{sd_dir}/{sidecar_names[0]}")
     print(f"archive={archive_path}")
     print(f"debug_archive={debug_archive_path}")
     print(f"notes={notes_path}")
@@ -341,10 +363,19 @@ def main() -> None:
         help="linker map (default: TARGET_MAP from Makefile)",
     )
     parser.add_argument(
-        "--ro",
-        dest="ro_path",
+        "--sidecar",
+        dest="sidecar_paths",
         type=Path,
-        help="optional rodata sidecar (default: RO_BIN from Makefile when set)",
+        action="append",
+        help="extra device file to install beside the binary; repeatable "
+             "(default: SIDECARS from the Makefile)",
+    )
+    parser.add_argument(
+        "--ro",
+        dest="sidecar_paths",
+        type=Path,
+        action="append",
+        help=argparse.SUPPRESS,  # deprecated spelling of --sidecar
     )
     parser.add_argument("--tag", required=True, help="release tag (e.g. v1.0.0)")
     parser.add_argument(
@@ -382,7 +413,7 @@ def main() -> None:
         docker_image=args.docker_image,
         elf_path=args.elf_path,
         map_path=args.map_path,
-        ro_path=args.ro_path,
+        sidecar_paths=args.sidecar_paths,
     )
 
 

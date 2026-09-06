@@ -434,7 +434,6 @@ def build_manifest(*, bin_path: Path, artifacts: list[Path], wasm_path: Path | N
             "url": elf_path.name,
             "bytes": size,
             "sha256": sha256,
-            "format": "elf",
         }]
 
     return {

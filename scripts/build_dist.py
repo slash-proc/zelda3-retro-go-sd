@@ -136,6 +136,8 @@ def declared_files(manifest: dict) -> list[str]:
             names.append(artifact["url"])
         for sym in target.get("symbols", []):
             names.append(sym["url"])
+    if manifest.get("cover"):
+        names.append(manifest["cover"]["url"])
     for tool in manifest["tools"]:
         names.append(tool["binary"]["url"])
     return sorted(set(names))

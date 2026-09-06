@@ -77,6 +77,9 @@ SIDECARS   := $(RO_BIN)
 HB_NAME    := Zelda 3
 COVER_JPG  := $(BUILD_DIR)/cover.jpg
 COVER_SRC  := src/assets/cover_src.png
+# Published with the release at full size. The cover packed into the binary is
+# capped at 186x100 and 10 KiB; this is the artwork it was made from.
+COVER_FULL := $(COVER_SRC)
 
 include $(GNW_CORE_SDK)/Makefile
 
@@ -129,6 +132,7 @@ pack: $(TARGET_BIN) $(RO_BIN) $(COVER_JPG)
 all: pack
 
 .PHONY: print-PROJECT_KIND print-PACKED_BIN print-SIDECARS print-RO_BIN print-CORE_NAME print-DOCKER_IMAGE \
+	print-COVER_FULL \
 	print-TARGET_ELF print-TARGET_MAP print-CORE_VERSION
 print-PROJECT_KIND:
 	@echo $(PROJECT_KIND)
@@ -142,6 +146,8 @@ print-SIDECARS:
 	@echo $(SIDECARS)
 print-RO_BIN:
 	@echo $(RO_BIN)
+print-COVER_FULL:
+	@echo $(COVER_FULL)
 print-CORE_NAME:
 	@echo $(CORE_NAME)
 print-DOCKER_IMAGE:

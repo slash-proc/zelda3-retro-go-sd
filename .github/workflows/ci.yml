@@ -200,6 +200,13 @@ jobs:
           ELF_NAME="$(basename "${TARGET_ELF}")"
           # --artifact, not --ro: the shared generator takes any number of
           # extra device files by one flag.
+          # Full-size box art, when this project keeps any. Optional and
+          # tolerated when absent, so the same block works in every project.
+          COVER_ARGS=()
+          COVER_FULL="$(make --no-print-directory print-COVER_FULL 2>/dev/null || true)"
+          if [ -n "${COVER_FULL}" ]; then
+            COVER_ARGS+=(--cover "release/$(basename "${COVER_FULL}")")
+          fi
           python3 scripts/make_manifest.py \
             --bin "release/${PACKED_BIN}" \
             --artifact "release/${RO_BIN}" \
@@ -208,6 +215,7 @@ jobs:
             --tag "${GITHUB_REF_NAME}" \
             --repo "${GITHUB_REPOSITORY}" \
             --commit "${GITHUB_SHA}" \
+            "${COVER_ARGS[@]}" \
             --out release/manifest.json
           # Every file the manifest names is installed from the release, so
           # every one has to be attached to it. stage_release.py already

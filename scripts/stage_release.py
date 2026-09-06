@@ -40,6 +40,13 @@ MAKE_VARS = (
     "TARGET_MAP",
 )
 
+# Read separately, and tolerated when absent. MAKE_VARS is positional and
+# strict: a project whose Makefile lacks one of those targets fails outright,
+# which is right for a variable every project must define. A late optional
+# addition cannot use that path without breaking every Makefile that has not
+# been updated yet, and this file is vendored verbatim into every project.
+OPTIONAL_MAKE_VARS = ("COVER_FULL",)
+
 HEADING_RE = re.compile(
     r"^##\s*(?:\[(?P<bracket>[^\]]+)\]|(?P<plain>[^\s#]+))(?:\s*-\s*(?P<date>.+))?\s*$",
     re.MULTILINE,
@@ -81,7 +88,23 @@ def read_make_vars() -> dict[str, str]:
         raise SystemExit(
             f"expected {len(MAKE_VARS)} Makefile values, got {len(values)}:\n{proc.stdout}"
         )
-    return dict(zip(MAKE_VARS, values, strict=True))
+    cfg = dict(zip(MAKE_VARS, values, strict=True))
+
+    for var in OPTIONAL_MAKE_VARS:
+        proc = subprocess.run(
+            ["make", "-f", str(MAKEFILE), "--no-print-directory", f"print-{var}"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        # A Makefile without the target is not an error: the project simply
+        # does not have the thing.
+        if proc.returncode == 0:
+            lines = proc.stdout.splitlines()
+            cfg[var] = lines[-1] if lines else ""
+
+    return cfg
 
 
 def resolve_sidecars(cfg: dict[str, str], explicit: list[str] | None) -> list[str]:
@@ -253,6 +276,18 @@ def stage_release(
             raise SystemExit(f"sidecar {name!r} not found: {src}")
         resolved_sidecars.append((name, src))
 
+    # Full-size box art, when the project keeps any. Not a device file -- it is
+    # never installed and never enters the SD zip -- but the manifest declares
+    # it, so the mirror has to be able to fetch it loose off the release.
+    cover = (cfg.get("COVER_FULL") or "").strip()
+    cover_src: Path | None = None
+    if cover:
+        cover_src = Path(cover)
+        if not cover_src.is_absolute():
+            cover_src = ROOT / cover_src
+        if not cover_src.is_file():
+            raise SystemExit(f"COVER_FULL not found: {cover_src}")
+
     changelog_body = extract_changelog_section(changelog_path, tag)
 
     sd_dir = sd_subdir(project_kind)
@@ -281,6 +316,11 @@ def stage_release(
         flat = out_dir / name
         shutil.copy2(src, flat)
         flat_files.append(flat)
+
+    cover_path: Path | None = None
+    if cover_src is not None:
+        cover_path = out_dir / cover_src.name
+        shutil.copy2(cover_src, cover_path)
 
     stem = Path(packed_name).stem
     tag_slug = slug(tag)
@@ -320,6 +360,8 @@ def stage_release(
     # GitHub Release assets: the loose files the manifest declares, plus the
     # install and debug zips for people who install by hand.
     release_files = [*flat_files, archive_path, debug_archive_path]
+    if cover_path is not None:
+        release_files.append(cover_path)
     files_path = out_dir / "release-files.txt"
     files_path.write_text(
         "\n".join(p.name for p in release_files) + "\n",
@@ -336,6 +378,8 @@ def stage_release(
         if len(sidecar_names) == 1:
             print(f"ro_bin={sidecar_names[0]}")
             print(f"ro_path=/{sd_dir}/{sidecar_names[0]}")
+    if cover_path is not None:
+        print(f"cover={cover_path}")
     print(f"archive={archive_path}")
     print(f"debug_archive={debug_archive_path}")
     print(f"notes={notes_path}")

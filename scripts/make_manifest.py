@@ -200,6 +200,32 @@ def check_not_template(header: dict) -> None:
             )
 
 
+def image_size(path: Path) -> tuple[int, int] | None:
+    """(width, height) of a PNG or JPEG, or None if the format is unfamiliar.
+
+    Read here rather than declared, because a dimension a human types is a
+    dimension that goes stale the first time the artwork is re-exported. Only
+    the two formats a project actually keeps its cover art in are understood;
+    anything else simply publishes no dimensions, which the schema allows.
+    """
+    data = path.read_bytes()
+    if data[:8] == b"\x89PNG\r\n\x1a\n" and data[12:16] == b"IHDR":
+        return struct.unpack_from(">II", data, 16)
+    if data[:2] == b"\xff\xd8":
+        i = 2
+        while i + 9 < len(data):
+            if data[i] != 0xFF:
+                return None
+            marker = data[i + 1]
+            length = struct.unpack_from(">H", data, i + 2)[0]
+            # SOF0..SOF15, excluding the four that are not frame headers.
+            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                height, width = struct.unpack_from(">HH", data, i + 5)
+                return width, height
+            i += 2 + length
+    return None
+
+
 def load_declared() -> dict:
     """gwrg.json: the hand-written half, and only that."""
     if not DECLARED.is_file():
@@ -208,7 +234,7 @@ def load_declared() -> dict:
         doc = json.loads(DECLARED.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise SystemExit(f"{DECLARED}: {exc}") from exc
-    unknown = set(doc) - {"$comment", "tool", "systems", "uses"}
+    unknown = set(doc) - {"$comment", "tool", "systems", "uses", "originalSystem"}
     if unknown:
         raise SystemExit(f"{DECLARED}: unknown key(s): {', '.join(sorted(unknown))}")
     return doc
@@ -376,7 +402,8 @@ def merge_systems(derived: list[dict], declared: dict) -> list[dict]:
 
 
 def build_manifest(*, bin_path: Path, artifacts: list[Path], wasm_path: Path | None,
-                   elf_path: Path | None, tag: str, repo: str, commit: str) -> dict:
+                   elf_path: Path | None, cover_path: Path | None,
+                   tag: str, repo: str, commit: str) -> dict:
     project_kind = make_var("PROJECT_KIND")
     if project_kind not in KIND:
         raise SystemExit(
@@ -436,7 +463,7 @@ def build_manifest(*, bin_path: Path, artifacts: list[Path], wasm_path: Path | N
             "sha256": sha256,
         }]
 
-    return {
+    manifest = {
         "schemaVersion": SCHEMA_VERSION,
         "project": project,
         "title": title,
@@ -447,6 +474,36 @@ def build_manifest(*, bin_path: Path, artifacts: list[Path], wasm_path: Path | N
         "tools": tools,
         "targets": [target],
     }
+
+    # Where this homebrew's work came from. A native program under /homebrews/
+    # says nothing about its origin the way a ROM under roms/<system>/ does, so
+    # anything looking up box art would otherwise have to search blind by name.
+    original_system = declared.get("originalSystem")
+    if original_system is not None:
+        if kind != "homebrew":
+            raise SystemExit(
+                "gwrg.json: originalSystem describes where a homebrew came from; "
+                "an emulator declares systems[] instead"
+            )
+        manifest["originalSystem"] = original_system
+
+    # Full-size box art. The GWHB header can carry a cover too, but that one is
+    # bounded by what the device decodes and caches (186x100, 10 KiB); this is
+    # the source image, for anything with a larger screen than the device.
+    if cover_path is not None:
+        size, sha256 = digest(cover_path)
+        cover = {
+            "filename": cover_path.name,
+            "url": cover_path.name,
+            "bytes": size,
+            "sha256": sha256,
+        }
+        dimensions = image_size(cover_path)
+        if dimensions is not None:
+            cover["width"], cover["height"] = dimensions
+        manifest["cover"] = cover
+
+    return manifest
 
 
 def main() -> None:
@@ -459,6 +516,8 @@ def main() -> None:
                     help="the converter module, when gwrg.json declares a tool")
     ap.add_argument("--elf", dest="elf_path", type=Path,
                     help="the linked ELF, published for crash symbolication")
+    ap.add_argument("--cover", dest="cover_path", type=Path,
+                    help="full-size box art, published beside the manifest")
     ap.add_argument("--tag", required=True)
     ap.add_argument("--repo", required=True, help="owner/name")
     ap.add_argument("--commit", required=True)
@@ -466,13 +525,15 @@ def main() -> None:
     args = ap.parse_args()
 
     for label, path in [("packed binary", args.bin_path), ("extractor module", args.wasm_path),
-                        ("ELF", args.elf_path), *[("artifact", a) for a in args.artifacts]]:
+                        ("ELF", args.elf_path), ("cover", args.cover_path),
+                        *[("artifact", a) for a in args.artifacts]]:
         if path is not None and not path.is_file():
             raise SystemExit(f"{label} not found: {path}")
 
     manifest = build_manifest(
         bin_path=args.bin_path, artifacts=args.artifacts, wasm_path=args.wasm_path,
-        elf_path=args.elf_path, tag=args.tag, repo=args.repo, commit=args.commit,
+        elf_path=args.elf_path, cover_path=args.cover_path,
+        tag=args.tag, repo=args.repo, commit=args.commit,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -493,6 +554,12 @@ def main() -> None:
         print(f"  produces {', '.join(o['filename'] for o in t['outputs'])}")
     for s in target.get("symbols", []):
         print(f"  symbols {s['filename']} {s['bytes']}B")
+    if "originalSystem" in manifest:
+        print(f"  originalSystem={manifest['originalSystem']}")
+    if "cover" in manifest:
+        c = manifest["cover"]
+        size = f" {c['width']}x{c['height']}" if "width" in c else ""
+        print(f"  cover {c['filename']} {c['bytes']}B{size}")
 
 
 if __name__ == "__main__":

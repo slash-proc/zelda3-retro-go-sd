@@ -34,6 +34,8 @@ def declared_files(manifest: dict) -> list[str]:
             names.append(artifact["url"])
         for sym in target.get("symbols", []):
             names.append(sym["url"])
+    if manifest.get("cover"):
+        names.append(manifest["cover"]["url"])
     for tool in manifest["tools"]:
         names.append(tool["binary"]["url"])
     return sorted(set(names))
@@ -46,6 +48,9 @@ def expected_sizes(manifest: dict) -> dict[str, tuple[int, str]]:
             sizes[artifact["url"]] = (artifact["bytes"], artifact["sha256"])
         for sym in target.get("symbols", []):
             sizes[sym["url"]] = (sym["bytes"], sym["sha256"])
+    if manifest.get("cover"):
+        cover = manifest["cover"]
+        sizes[cover["url"]] = (cover["bytes"], cover["sha256"])
     for tool in manifest["tools"]:
         sizes[tool["binary"]["url"]] = (tool["binary"]["bytes"], tool["binary"]["sha256"])
     return sizes

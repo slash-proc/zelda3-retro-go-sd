@@ -1,5 +1,6 @@
 {
   "$comment": "The hand-written half of this project's manifest. Everything else -- sizes, hashes, the firmware ABI, the display name, the module's memory ceiling -- is derived from the built bytes by scripts/make_manifest.py. Nothing derivable belongs here.",
+  "originalSystem": "snes",
   "tool": {
     "id": "zelda3-assets",
     "title": {

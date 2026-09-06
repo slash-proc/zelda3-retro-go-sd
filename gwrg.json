@@ -33,7 +33,9 @@
           {
             "id": "us",
             "label": {
-              "en": "Legend of Zelda, The - A Link to the Past (USA)"
+              "en": "English (US)",
+              "fr": "Anglais (US)",
+              "de": "Englisch (US)"
             },
             "sha1": "6D4F10A8B10E10DBE624CB23CF03B88BB8252973"
           }
@@ -63,77 +65,99 @@
           {
             "id": "de",
             "label": {
-              "en": "Legend of Zelda, The - A Link to the Past (Germany)"
+              "en": "German",
+              "fr": "Allemand",
+              "de": "Deutsch"
             },
             "sha1": "2E62494967FB0AFDF5DA1635607F9641DF7C6559"
           },
           {
             "id": "fr",
             "label": {
-              "en": "Legend of Zelda, The - A Link to the Past (France)"
+              "en": "French",
+              "fr": "Français",
+              "de": "Französisch"
             },
             "sha1": "229364A1B92A05167CD38609B1AA98F7041987CC"
           },
           {
             "id": "fr-c",
             "label": {
-              "en": "Legend of Zelda, The - A Link to the Past (Canada)"
+              "en": "French (Canada)",
+              "fr": "Français (Canada)",
+              "de": "Französisch (Kanada)"
             },
             "sha1": "C1C6C7F76FFF936C534FF11F87A54162FC0AA100"
           },
           {
             "id": "en",
             "label": {
-              "en": "Legend of Zelda, The - A Link to the Past (Europe)"
+              "en": "English (UK)",
+              "fr": "Anglais (UK)",
+              "de": "Englisch (UK)"
             },
             "sha1": "7C073A222569B9B8E8CA5FCB5DFEC3B5E31DA895"
           },
           {
             "id": "es",
             "label": {
-              "en": "Spanish translation"
+              "en": "Spanish (fan)",
+              "fr": "Espagnol (fan)",
+              "de": "Spanisch (Fan)"
             },
             "sha1": "461FCBD700D1332009C0E85A7A136E2A8E4B111E"
           },
           {
             "id": "pl",
             "label": {
-              "en": "Polish translation"
+              "en": "Polish (fan)",
+              "fr": "Polonais (fan)",
+              "de": "Polnisch (Fan)"
             },
             "sha1": "3C4D605EEFDA1D76F101965138F238476655B11D"
           },
           {
             "id": "pt",
             "label": {
-              "en": "Portuguese translation"
+              "en": "Portuguese (fan)",
+              "fr": "Portugais (fan)",
+              "de": "Portugiesisch (Fan)"
             },
             "sha1": "D0D09ED41F9C373FE6AFDCCAFBF0DA8C88D3D90D"
           },
           {
             "id": "redux",
             "label": {
-              "en": "English Redux (translation release)"
+              "en": "English (Redux)",
+              "fr": "Anglais (Redux)",
+              "de": "Englisch (Redux)"
             },
             "sha1": "B2A07A59E64C498BC1B2F28728F9BF4014C8D582"
           },
           {
             "id": "redux-2",
             "label": {
-              "en": "English Redux (hack release)"
+              "en": "English (Redux, hack)",
+              "fr": "Anglais (Redux, hack)",
+              "de": "Englisch (Redux, Hack)"
             },
             "sha1": "9325C22EB0A2A1F0017157C8B620BC3A605CEDE1"
           },
           {
             "id": "nl",
             "label": {
-              "en": "Dutch translation"
+              "en": "Dutch (fan)",
+              "fr": "Néerlandais (fan)",
+              "de": "Niederländisch (Fan)"
             },
             "sha1": "FA8ADFDBA2697C9A54D583A1284A22AC764C7637"
           },
           {
             "id": "sv",
             "label": {
-              "en": "Swedish translation"
+              "en": "Swedish (fan)",
+              "fr": "Suédois (fan)",
+              "de": "Schwedisch (Fan)"
             },
             "sha1": "43CD3438469B2C3FE879EA2F410B3EF3CB3F1CA4"
           }

@@ -72,6 +72,8 @@ CORE_LDSCRIPT := src/zelda3_core.ld
 
 PACKED_BIN := Zelda 3.bin
 RO_BIN     := zelda3.ro
+# The same file, under the name the shared tooling now uses.
+SIDECARS   := $(RO_BIN)
 HB_NAME    := Zelda 3
 COVER_JPG  := $(BUILD_DIR)/cover.jpg
 COVER_SRC  := src/assets/cover_src.png
@@ -126,12 +128,18 @@ pack: $(TARGET_BIN) $(RO_BIN) $(COVER_JPG)
 
 all: pack
 
-.PHONY: print-PROJECT_KIND print-PACKED_BIN print-RO_BIN print-CORE_NAME print-DOCKER_IMAGE \
+.PHONY: print-PROJECT_KIND print-PACKED_BIN print-SIDECARS print-RO_BIN print-CORE_NAME print-DOCKER_IMAGE \
 	print-TARGET_ELF print-TARGET_MAP print-CORE_VERSION
 print-PROJECT_KIND:
 	@echo $(PROJECT_KIND)
 print-PACKED_BIN:
 	@echo $(PACKED_BIN)
+# The second device file. Unlike every other project so far, this homebrew
+# installs two artifacts: the packed binary and the read-only data it reads
+# from the card at run time.
+# Extra device files installed beside PACKED_BIN, space separated.
+print-SIDECARS:
+	@echo $(SIDECARS)
 print-RO_BIN:
 	@echo $(RO_BIN)
 print-CORE_NAME:

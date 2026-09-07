@@ -170,7 +170,8 @@
       {
         "id": "assets",
         "filename": "zelda3_assets.dat",
-        "maxBytes": 67108864,
+        "maxBytes": 1572864,
+        "$comment": "Worst case, not the safety ceiling: 683,888 bytes for the US baseline plus up to ~41,712 per added language (measured: FR 39,648, DE 41,712) across 11 selectable languages, rounded up to 1.5 MiB. tool.maxOutputBytes stays the loose limit on what the module may write at all.",
         "label": {
           "en": "Asset pack",
           "fr": "Pack de ressources",

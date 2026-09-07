@@ -226,6 +226,22 @@ def image_size(path: Path) -> tuple[int, int] | None:
     return None
 
 
+def strip_comments(node):
+    """Drop every "$comment" key, at any depth.
+
+    gwrg.json is where a human writes down why a number is what it is, and that
+    reasoning is worth keeping next to the number rather than in a commit
+    message nobody will find. None of it belongs in a published manifest, whose
+    shape is closed: the schema refuses unknown fields wherever it can, so a
+    stray note would fail validation at release time.
+    """
+    if isinstance(node, dict):
+        return {k: strip_comments(v) for k, v in node.items() if k != "$comment"}
+    if isinstance(node, list):
+        return [strip_comments(v) for v in node]
+    return node
+
+
 def load_declared() -> dict:
     """gwrg.json: the hand-written half, and only that."""
     if not DECLARED.is_file():
@@ -234,10 +250,12 @@ def load_declared() -> dict:
         doc = json.loads(DECLARED.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise SystemExit(f"{DECLARED}: {exc}") from exc
-    unknown = set(doc) - {"$comment", "tool", "systems", "uses", "originalSystem"}
+    unknown = set(doc) - {
+        "$comment", "tool", "systems", "uses", "originalSystem", "storage", "runtime",
+    }
     if unknown:
         raise SystemExit(f"{DECLARED}: unknown key(s): {', '.join(sorted(unknown))}")
-    return doc
+    return strip_comments(doc)
 
 
 # --- the converter, when a project ships one ---------------------------------
@@ -335,7 +353,9 @@ def merge_systems(derived: list[dict], declared: dict) -> list[dict]:
                 f"gwrg.json says nothing about it. Every system needs at least "
                 f"shortName and compression."
             )
-        unknown = set(extra) - {"shortName", "compression", "extensions", "bios"}
+        unknown = set(extra) - {
+            "shortName", "compression", "extensions", "bios", "runtime", "$comment",
+        }
         if unknown:
             raise SystemExit(
                 f"gwrg.json: system {system['id']!r} has unknown key(s): "
@@ -343,6 +363,11 @@ def merge_systems(derived: list[dict], declared: dict) -> list[dict]:
             )
 
         merged = dict(system)
+        # Working space this system needs while running, over and above the
+        # files it installs. Declared, not derived: neither gnw_core_meta_t nor
+        # the GWHB header carries a savestate size today.
+        if "runtime" in extra:
+            merged["runtime"] = extra["runtime"]
         if "extensions" in extra:
             # Grouping is the one thing gwrg.json may add to, because the struct
             # has nowhere to put it: it knows a PC Engine CD game is a .cue, not
@@ -437,6 +462,14 @@ def build_manifest(*, bin_path: Path, artifacts: list[Path], wasm_path: Path | N
         ],
     }
 
+    if "runtime" in declared:
+        if kind != "homebrew":
+            raise SystemExit(
+                "gwrg.json: runtime belongs to a system for an emulator; "
+                "declare it under systems[<id>].runtime"
+            )
+        target["runtime"] = declared["runtime"]
+
     if kind == "emulator":
         target["systems"] = merge_systems(header["systems"], declared.get("systems", {}))
     elif declared.get("systems"):
@@ -474,6 +507,12 @@ def build_manifest(*, bin_path: Path, artifacts: list[Path], wasm_path: Path | N
         "tools": tools,
         "targets": [target],
     }
+
+    # Which installs this project works on. Absent means both: a project only
+    # says so when one of them is genuinely out of reach.
+    storage = declared.get("storage")
+    if storage is not None:
+        manifest["storage"] = storage
 
     # Where this homebrew's work came from. A native program under /homebrews/
     # says nothing about its origin the way a ROM under roms/<system>/ does, so

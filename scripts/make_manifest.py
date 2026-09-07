@@ -354,7 +354,8 @@ def merge_systems(derived: list[dict], declared: dict) -> list[dict]:
                 f"shortName and compression."
             )
         unknown = set(extra) - {
-            "shortName", "compression", "extensions", "bios", "runtime", "$comment",
+            "shortName", "compression", "extensions", "bios", "runtime", "biosDir",
+            "$comment",
         }
         if unknown:
             raise SystemExit(
@@ -368,6 +369,11 @@ def merge_systems(derived: list[dict], declared: dict) -> list[dict]:
         # the GWHB header carries a savestate size today.
         if "runtime" in extra:
             merged["runtime"] = extra["runtime"]
+        # The BIOS folder key, when it is not the ROM folder's. col vs
+        # bios/coleco, pcecd vs bios/pce. The struct carries dirname for ROMs
+        # and has nowhere to say this, so it is declared.
+        if "biosDir" in extra:
+            merged["biosDir"] = extra["biosDir"]
         if "extensions" in extra:
             # Grouping is the one thing gwrg.json may add to, because the struct
             # has nowhere to put it: it knows a PC Engine CD game is a .cue, not

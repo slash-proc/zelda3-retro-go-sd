@@ -38,6 +38,7 @@
 #include "common.h"
 #include "ff.h"
 #include "rg_storage.h"
+#include "bilinear.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -308,11 +309,11 @@ typedef struct {
      * retro-go: system
      * ================================================================ */
     void (*odroid_system_init)(int app_id, int sample_rate);
-    /* cheat_update_cb (7th arg) added for TGB Dual (Game Boy / Game Boy
-     * Color): every core in this repo is rebuilt from source alongside the
-     * firmware (the packaged core binaries under cores/ are gitignored,
-     * nothing is distributed as a prebuilt blob yet), so this branch has
-     * no released-ABI compatibility window to preserve — no
+    /* cheat_update_cb (7th arg) added for cores that update cheats mid-run
+     * (e.g. external GB/GBC). Every core in this repo is rebuilt from source
+     * alongside the firmware (the packaged core binaries under cores/ are
+     * gitignored, nothing is distributed as a prebuilt blob yet), so this
+     * branch has no released-ABI compatibility window to preserve — no
      * GW_FIRMWARE_ABI_VERSION bump needed for this signature change (see
      * that macro's comment above). */
     void (*odroid_system_emu_init)(state_handler_t load_cb,
@@ -404,8 +405,7 @@ typedef struct {
 
     /* ================================================================
      * v1 append: surface required to port a "classic" emulator core
-     * (e.g. Watara Supervision) to the external-core model. Identified
-     * by porting Core/Src/porting/wsv/main_wsv.c against this ABI.
+     * to the external-core model.
      * ================================================================ */
     char    *(*strcpy)(char *, const char *);
     void    *(*malloc)(size_t size);
@@ -464,11 +464,8 @@ typedef struct {
     uint32_t                    *common_emu_sound_dma_marker_ptr;
 
     /* ================================================================
-     * v2 append: surface required to port TGB Dual (Game Boy / Game Boy
-     * Color, C++) to the external-core model. Identified by porting
-     * Core/Src/porting/gb_tgbdual/main_gb_tgbdual.cpp (+ gw_renderer.cpp)
-     * against this ABI. (GW_GetUnixTM/mktime were dropped during
-     * external-core development — use time()+localtime() instead.)
+     * v2 append: palette settings used by external GB/GBC core (TGB Dual)
+     * and other systems. Keep for ABI compatibility.
      * ================================================================ */
     int32_t  (*odroid_settings_Palette_get)(void);
     void     (*odroid_settings_Palette_set)(int32_t value);
@@ -483,8 +480,8 @@ typedef struct {
                                                   gw_file_progress_cb_t file_progress_cb);
 
     /* ================================================================
-     * v2 append: blueMSX (MSX) porting surface. Identified by porting
-     * Core/Src/porting/msx/main_msx.c (+ msx_database.c) against this ABI.
+     * v2 append: MSX external-core surface (SHA1 helpers used by
+     * msxromdb / disk identity; keep for ABI compatibility).
      * (ahb_* → mem_ctl. calculate_sha1_file is the whole-file form of
      * calculate_sha1_file_limit.)
      * ================================================================ */
@@ -493,7 +490,7 @@ typedef struct {
     int8_t   (*calculate_sha1_hw)(const uint8_t *data, size_t len, uint8_t *output);
 
     /* ================================================================
-     * v2 append: blueMSX extras (RTC init, disk-swap UI, ROM loader).
+     * v2 append: MSX extras (RTC init, disk-swap UI, path helpers).
      * ================================================================ */
     struct tm *(*localtime)(const time_t *timer);
     int      (*gettimeofday)(struct timeval *tv, void *tz);
@@ -503,7 +500,7 @@ typedef struct {
     const char *(*rg_basename)(const char *path);
 
     /* ================================================================
-     * v2 append: LCD-Game-Emulator (Game & Watch handhelds).
+     * v2 append: LCD-Game-Emulator (external Game & Watch core).
      * GW_SetUnixTM is the only RTC write entry left after the read-side
      * getters were dropped (no portable libc setter on this firmware).
      * ================================================================ */
@@ -606,6 +603,21 @@ typedef struct {
     uint32_t (*dma2d_m2m_rgb565_start_ex)(uint32_t src, uint32_t dst,
                                           uint16_t width, uint16_t height,
                                           uint16_t src_offset, uint16_t dst_offset);
+
+    /* ================================================================
+     * v2 append: soft bilinear blit (OpenMV imlib_draw_image). Used by
+     * GB/WSV/Celeste soft scaling filters. Types live in bilinear.h.
+     * Append-only — no version bump; required_abi_min_size grows for
+     * cores that link this slot.
+     * ================================================================ */
+    void (*imlib_draw_image)(image_t *dst_img, image_t *src_img,
+                             int dst_x_start, int dst_y_start, int dst_stride,
+                             float x_scale, float y_scale, rectangle_t *roi,
+                             int rgb_channel, int alpha,
+                             const uint16_t *color_palette,
+                             const uint8_t *alpha_palette, image_hint_t hint,
+                             imlib_draw_row_callback_t callback,
+                             void *dst_row_override);
 
 } gw_firmware_abi_t;
 

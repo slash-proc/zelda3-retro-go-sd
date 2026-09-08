@@ -2,8 +2,7 @@
  * Shared C++ runtime support for standalone "core" binaries.
  *
  * Pulled in automatically by cores/_template/Makefile whenever a core sets
- * CORE_CXX_SOURCES (see that variable's doc comment) — cores/gb_tgbdual is
- * the first (and, as of this writing, only) consumer.
+ * CORE_CXX_SOURCES (see that variable's doc comment) — e.g. external Stella.
  *
  * A C++ core builds -nostdlib, no libstdc++ (see cores/_template/Makefile's
  * CXXFLAGS comment on -fno-exceptions/-fno-rtti/-fno-threadsafe-statics/
@@ -17,11 +16,9 @@
  *     heap_alloc_mem() below, a small allocator on top of the existing
  *     ram_malloc()/itc_malloc()/ahb_calloc() core_common trampolines.
  *     Behaviorally the same allocator as the (now unused, monolithic-build-
- *     only) Core/Src/heap.cpp: cores/gb_tgbdual/main_gb_tgbdual.cpp and
- *     every .cpp file under external/tgbdual-go/gb_core call these exact names directly
+ *     only) Core/Src/heap.cpp. C++ cores call these names directly
  *     (declared in Core/Inc/heap.hpp) — heap_itc_alloc(true) temporarily
- *     routes allocations through the 64KB ITC pool (used for GB WRAM/VRAM
- *     banking when cart SRAM mapping doesn't need it), falling back to the
+ *     routes allocations through the 64KB ITC pool, falling back to the
  *     shared RAM_EMU bump pool and then AHB SRAM when that's exhausted.
  *   - __cxa_pure_virtual: GCC always emits a reference to this in an
  *     abstract base class's vtable (for the pure-virtual slots), even
@@ -39,7 +36,9 @@
 #include <cstddef>
 #include <cstring>
 #include <cstdio>
+#ifndef HOST_BUILD
 #include <sys/reent.h>
+#endif
 
 extern "C" {
 #include "gw_malloc.h"
@@ -56,6 +55,7 @@ extern "C" void heap_itc_alloc(bool itc)
     s_heap_itc_alloc = itc;
 }
 
+#ifdef GW_HEAP_TRACE
 static const char *heap_pool_name(const void *ptr)
 {
     uintptr_t p = (uintptr_t)ptr;
@@ -69,6 +69,7 @@ static const char *heap_pool_name(const void *ptr)
         return "AHB";
     return "?";
 }
+#endif
 
 extern "C" void *heap_alloc_mem(size_t s)
 {
@@ -102,8 +103,12 @@ extern "C" void *heap_alloc_mem(size_t s)
 
     if (ptr) {
         memset(ptr, 0, s);
+#ifdef GW_HEAP_TRACE
         printf("[heap] %u B -> %s @ %p (tag %s)\n",
                (unsigned)s, pool, ptr, heap_pool_name(ptr));
+#else
+        (void)pool;
+#endif
     } else {
         printf("[heap] %u B -> FAIL\n", (unsigned)s);
     }
@@ -148,6 +153,18 @@ extern "C" void cpp_heap_init(size_t bss_end)
 /* ====================================================================
  * operator new/delete
  * ==================================================================== */
+#ifdef HOST_BUILD
+/* Desktop build links real libc++/SDL: a freestanding no-free operator
+ * new would intercept every C++ allocation in the process (and leak).
+ * Explicit emulator buffers still go through heap_alloc_mem(). */
+#include <cstdlib>
+void *operator new(size_t s) { return std::malloc(s ? s : 1); }
+void *operator new[](size_t s) { return std::malloc(s ? s : 1); }
+void operator delete(void *p) noexcept { std::free(p); }
+void operator delete[](void *p) noexcept { std::free(p); }
+void operator delete(void *p, size_t) noexcept { std::free(p); }
+void operator delete[](void *p, size_t) noexcept { std::free(p); }
+#else
 void *operator new(size_t s) { return heap_alloc_mem(s); }
 void *operator new[](size_t s) { return heap_alloc_mem(s); }
 
@@ -162,6 +179,7 @@ void operator delete(void *p) { (void)p; }
 void operator delete[](void *p) { (void)p; }
 void operator delete(void *p, size_t s) { (void)p; (void)s; }
 void operator delete[](void *p, size_t s) { (void)p; (void)s; }
+#endif
 
 /* ====================================================================
  * Minimal C++ runtime symbols the compiler/linker require to exist even
@@ -183,7 +201,7 @@ extern "C" int __cxa_atexit(void (*)(void *), void *, void *)
 }
 
 /* ====================================================================
- * Exception / unwind stubs for cores that link -lstdc++ (Stella).
+ * Exception / unwind stubs for cores that link -lstdc++ (e.g. Stella).
  *
  * Toolchain libstdc++.a is built WITH exceptions; even with our own
  * -fno-exceptions, string/length_error paths still reference the EH

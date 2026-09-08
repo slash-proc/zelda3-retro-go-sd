@@ -68,7 +68,9 @@ Same as cores for steps 2–7, but:
 1. Build with `PROJECT_KIND=homebrew` (same `src/main.c`; ROM/cheat paths are
    compiled out via `PROJECT_KIND_HOMEBREW`).
 2. Pack metadata uses `pack_homebrew.py` (`--name`, `--version`, optional
-   `--cover`) — see the homebrew branch in the root `Makefile`.
+   `--cover`) — see the homebrew branch in the root `Makefile`. Extra
+   segments (ITCM / RAM_UC) use the same `CORE_EXTRA_SEGMENTS` / auto
+   ELF discovery as cores (`gnw_core_segment_t` in the GWHB header).
 3. No ROM load — `ACTIVE_FILE` is the GWHB `.bin` under `/roms/homebrew/`.
 4. Cover JPEG ≤ 186×100 and ≤ 10 KiB; `/covers/homebrew/<stem>.img`
   overrides the embedded cover if present.

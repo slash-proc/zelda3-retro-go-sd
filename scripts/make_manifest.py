@@ -336,6 +336,35 @@ def build_tool(declared: dict, wasm_path: Path) -> dict:
 # --- systems -----------------------------------------------------------------
 
 
+def attach_shipped_bios(systems: list[dict], bios_paths: list[Path]) -> None:
+    """Fill in url/bytes/sha256 for BIOS files this project ships.
+
+    The hash is read off the file, never declared, for the same reason every
+    other hash here is: a number a human types is a number that goes stale.
+    A file that matches nothing declared is an error rather than an extra
+    artifact -- it would install to /bios/<key>/ and no manifest would say so.
+    """
+    remaining = {p.name: p for p in bios_paths}
+    for system in systems:
+        for entry in system.get("bios", []):
+            names = entry["filename"]
+            names = [names] if isinstance(names, str) else names
+            for name in names:
+                path = remaining.pop(name, None)
+                if path is None:
+                    continue
+                size, sha256 = digest(path)
+                entry["url"] = name
+                entry["bytes"] = size
+                entry["sha256"] = sha256
+                break
+    if remaining:
+        raise SystemExit(
+            "--bios names file(s) no system declares: "
+            + ", ".join(sorted(remaining))
+        )
+
+
 def merge_systems(derived: list[dict], declared: dict) -> list[dict]:
     """Derived systems plus the parts the binary cannot state.
 
@@ -434,7 +463,7 @@ def merge_systems(derived: list[dict], declared: dict) -> list[dict]:
 
 def build_manifest(*, bin_path: Path, artifacts: list[Path], wasm_path: Path | None,
                    elf_path: Path | None, cover_path: Path | None,
-                   tag: str, repo: str, commit: str) -> dict:
+                   bios_paths: list[Path], tag: str, repo: str, commit: str) -> dict:
     project_kind = make_var("PROJECT_KIND")
     if project_kind not in KIND:
         raise SystemExit(
@@ -478,6 +507,9 @@ def build_manifest(*, bin_path: Path, artifacts: list[Path], wasm_path: Path | N
 
     if kind == "emulator":
         target["systems"] = merge_systems(header["systems"], declared.get("systems", {}))
+        attach_shipped_bios(target["systems"], bios_paths)
+    elif bios_paths:
+        raise SystemExit("--bios given but this is a homebrew, which has no systems[]")
     elif declared.get("systems"):
         raise SystemExit("gwrg.json: systems[] belongs to an emulator core, not a homebrew")
 
@@ -563,6 +595,9 @@ def main() -> None:
                     help="the linked ELF, published for crash symbolication")
     ap.add_argument("--cover", dest="cover_path", type=Path,
                     help="full-size box art, published beside the manifest")
+    ap.add_argument("--bios", dest="bios_paths", type=Path, action="append", default=[],
+                    help="a BIOS file this project ships rather than asking the "
+                         "user for; repeatable. Installs to /bios/<biosDir or id>/")
     ap.add_argument("--tag", required=True)
     ap.add_argument("--repo", required=True, help="owner/name")
     ap.add_argument("--commit", required=True)
@@ -571,6 +606,7 @@ def main() -> None:
 
     for label, path in [("packed binary", args.bin_path), ("extractor module", args.wasm_path),
                         ("ELF", args.elf_path), ("cover", args.cover_path),
+                        *[("bios", b) for b in args.bios_paths],
                         *[("artifact", a) for a in args.artifacts]]:
         if path is not None and not path.is_file():
             raise SystemExit(f"{label} not found: {path}")
@@ -578,7 +614,7 @@ def main() -> None:
     manifest = build_manifest(
         bin_path=args.bin_path, artifacts=args.artifacts, wasm_path=args.wasm_path,
         elf_path=args.elf_path, cover_path=args.cover_path,
-        tag=args.tag, repo=args.repo, commit=args.commit,
+        bios_paths=args.bios_paths, tag=args.tag, repo=args.repo, commit=args.commit,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -592,8 +628,10 @@ def main() -> None:
     for a in target["artifacts"]:
         print(f"  artifact {a['filename']!r} {a['bytes']}B sha256={a['sha256'][:16]}…")
     for s in target.get("systems", []):
+        shipped = sum(1 for b in s.get("bios", []) if "url" in b)
         print(f"  system {s['id']}: {s['longName']!r} {s['extensions']} "
-              f"browse={s['browse']} bios={len(s.get('bios', []))}")
+              f"browse={s['browse']} bios={len(s.get('bios', []))} "
+              f"(shipped {shipped}, into /bios/{s.get('biosDir', s['id'])}/)")
     for t in manifest["tools"]:
         print(f"  tool {t['id']} {t['binary']['file']} sha256={t['binary']['sha256'][:16]}…")
         print(f"  produces {', '.join(o['filename'] for o in t['outputs'])}")

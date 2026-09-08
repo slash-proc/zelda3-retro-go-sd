@@ -136,6 +136,12 @@ def declared_files(manifest: dict) -> list[str]:
             names.append(artifact["url"])
         for sym in target.get("symbols", []):
             names.append(sym["url"])
+        # A BIOS the project ships is published like an artifact; one the user
+        # supplies has no url and nothing to fetch.
+        for system in target.get("systems", []):
+            for b in system.get("bios", []):
+                if b.get("url"):
+                    names.append(b["url"])
     if manifest.get("cover"):
         names.append(manifest["cover"]["url"])
     for tool in manifest["tools"]:

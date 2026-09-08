@@ -61,9 +61,27 @@ TARGET = {
 
 GWHB_MAGIC = b"GWHB"
 # gwhb_meta_t, from sdk/include/Core/Inc/retro-go/gwhb.h. Exactly 96 bytes.
-GWHB_FORMAT = "<7I32s4B32s"
-GWHB_SIZE = struct.calcsize(GWHB_FORMAT)
-assert GWHB_SIZE == 96, GWHB_SIZE
+# Two GWHB metadata layouts exist, and both call themselves version 1.
+#
+# The original is one code_size/bss_size pair. The current one replaces that
+# with the same multi-segment model CORE uses (segments_count + segments[4],
+# 12 bytes each) and shrinks reserved[32] to reserved[16]. GWHB_META_VERSION
+# was not bumped when that happened, so the version field cannot tell them
+# apart and this file has to work it out from the sizes -- see pick_gwhb().
+#
+# Both are supported deliberately: homebrew that predates the change is still
+# installed, still published, and must keep producing a correct manifest.
+GWHB_V1_FORMAT = "<7I32s4B32s"
+GWHB_V1_SIZE = struct.calcsize(GWHB_V1_FORMAT)
+GWHB_SEGMENTS = 4
+GWHB_V2_FORMAT = "<4I" + ("III" * GWHB_SEGMENTS) + "2I32s4B16s"
+GWHB_V2_SIZE = struct.calcsize(GWHB_V2_FORMAT)
+# Kept for the length checks shared with CORE; the smaller of the two is the
+# least a file must carry to be a GWHB binary at all.
+GWHB_FORMAT = GWHB_V1_FORMAT
+GWHB_SIZE = GWHB_V1_SIZE
+assert GWHB_V1_SIZE == 96, GWHB_V1_SIZE
+assert GWHB_V2_SIZE == 124, GWHB_V2_SIZE
 
 CORE_MAGIC = b"CORE"
 # gnw_core_segment_t / gnw_core_system_t / gnw_core_meta_t, from
@@ -135,10 +153,60 @@ def envelope(path: Path, magic: bytes, meta_size: int) -> bytes:
     return data[8:8 + meta_size]
 
 
+def pick_gwhb(data: bytes, header_length: int, path: Path) -> int:
+    """Which gwhb_meta_t layout this binary carries: GWHB_V1_SIZE or V2.
+
+    `header_length` is the metadata struct *plus* any embedded cover, so it
+    cannot simply be compared against a struct size.
+
+    Two signals, in order:
+
+    1. No cover -- header_length is exactly the struct size, which is decisive.
+    2. A cover -- `cover_offset` is absolute from the start of the file, so it
+       reads 8 + sizeof(meta) for whichever layout is real. Reading it at the
+       wrong offset lands in the segment array (v2) or the reserved tail (v1),
+       which will not match either candidate.
+
+    Anything else is refused rather than guessed at: a wrong layout produces a
+    manifest with a plausible-looking title read out of the middle of another
+    field, which is worse than a failed release.
+    """
+    for size in (GWHB_V1_SIZE, GWHB_V2_SIZE):
+        if header_length == size:
+            return size
+    cover_offset_at = {GWHB_V1_SIZE: 8 + 20, GWHB_V2_SIZE: 8 + 64}
+    for size, off in cover_offset_at.items():
+        if len(data) < off + 4:
+            continue
+        if struct.unpack_from("<I", data, off)[0] == 8 + size:
+            return size
+    raise SystemExit(
+        f"{path}: cannot tell which gwhb_meta_t layout this is "
+        f"(header_length {header_length}, no usable cover_offset). Both "
+        f"layouts claim version 1; rebuild with a current SDK."
+    )
+
+
 def read_gwhb(path: Path) -> dict:
-    fields = struct.unpack(GWHB_FORMAT, envelope(path, GWHB_MAGIC, GWHB_SIZE))
-    (abi_version, abi_min_size, _flags, _code, _bss, _cover_off, _cover_size,
-     display_name, _maj, _min, _pat, _r0, _reserved) = fields
+    data = path.read_bytes()
+    if len(data) < 8 + GWHB_V1_SIZE or data[:4] != GWHB_MAGIC:
+        # Reuse the shared checks for the message they produce.
+        envelope(path, GWHB_MAGIC, GWHB_V1_SIZE)
+    _version, header_length = struct.unpack_from("<HH", data, 4)
+    size = pick_gwhb(data, header_length, path)
+
+    if size == GWHB_V1_SIZE:
+        fields = struct.unpack(GWHB_V1_FORMAT, envelope(path, GWHB_MAGIC, size))
+        (abi_version, abi_min_size, _flags, _code, _bss, _cover_off, _cover_size,
+         display_name, _maj, _min, _pat, _r0, _reserved) = fields
+    else:
+        fields = struct.unpack(GWHB_V2_FORMAT, envelope(path, GWHB_MAGIC, size))
+        abi_version, abi_min_size, _flags, segments_count = fields[:4]
+        display_name = fields[4 + 3 * GWHB_SEGMENTS + 2]
+        if not 1 <= segments_count <= GWHB_SEGMENTS:
+            raise SystemExit(
+                f"{path}: segments_count {segments_count} is outside 1..{GWHB_SEGMENTS}"
+            )
     return {
         "abi": {"version": abi_version, "minSize": abi_min_size},
         "title": cstr(display_name),

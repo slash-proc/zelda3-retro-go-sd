@@ -14,7 +14,6 @@
       {
         "id": "base",
         "required": true,
-        "repeatable": false,
         "label": {
           "en": "Base ROM",
           "fr": "ROM de base",
@@ -41,12 +40,12 @@
             "sha1": "6D4F10A8B10E10DBE624CB23CF03B88BB8252973"
           }
         ],
-        "strict": true
+        "strict": true,
+        "allowMultiple": false
       },
       {
         "id": "language",
         "required": false,
-        "repeatable": true,
         "label": {
           "en": "Translated ROM",
           "fr": "ROM traduite",
@@ -163,7 +162,8 @@
             "sha1": "43CD3438469B2C3FE879EA2F410B3EF3CB3F1CA4"
           }
         ],
-        "strict": true
+        "strict": true,
+        "allowMultiple": true
       }
     ],
     "outputs": [

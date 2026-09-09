@@ -61,6 +61,18 @@ async function digest(algo, bytes) {
   return hex(await crypto.subtle.digest(algo, bytes));
 }
 
+// The spec renamed inputs[].repeatable to allowMultiple. Older published
+// manifests still say repeatable, and the version picker can load any of them,
+// so accept either and carry one name inwards. Without this a manifest using
+// the new spelling reads as "one file only" and a role that takes several --
+// zelda3's translations -- silently accepts one.
+function normaliseTool(tool) {
+  if (!tool) return tool;
+  const inputs = (tool.inputs ?? []).map((i) =>
+    i.allowMultiple === undefined ? i : { ...i, repeatable: i.allowMultiple });
+  return { ...tool, inputs };
+}
+
 const roles = () => state.tool?.inputs ?? [];
 const requiredRoles = () => roles().filter((r) => r.required);
 const filesFor = (roleId) => state.files.get(roleId) ?? [];
@@ -239,7 +251,7 @@ async function loadVersion(manifestUrl, entry) {
   state.manifestUrl = String(manifestUrl);
   state.version = entry;
   state.wasmBytes = bytes;
-  state.tool = tool;
+  state.tool = normaliseTool(tool);
   state.manifest = manifest;
   state.moduleSha256 = sha256;
 

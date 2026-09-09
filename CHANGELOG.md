@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.3.2] - 2026-09-09
+
+### Fixed
+
+- The conversion page accepts several translated ROMs again. The spec renamed
+  `inputs[].repeatable` to `allowMultiple` and the page still read the old
+  name, so the row that exists to take a shelf of translations quietly took
+  one. It now reads either name, which also keeps older versions working in
+  the version picker.
+
 ## [v0.3.1] - 2026-09-09
 
 ### Changed

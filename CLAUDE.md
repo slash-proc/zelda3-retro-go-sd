@@ -71,7 +71,7 @@ Same as cores for steps 2–7, but:
    `--cover`) — see the homebrew branch in the root `Makefile`. Extra
    segments (ITCM / RAM_UC) use the same `CORE_EXTRA_SEGMENTS` / auto
    ELF discovery as cores (`gnw_core_segment_t` in the GWHB header).
-3. No ROM load — `ACTIVE_FILE` is the GWHB `.bin` under `/roms/homebrew/`.
+3. No ROM load — `ACTIVE_FILE` is the GWHB `.bin` under `/homebrews/`.
 4. Cover JPEG ≤ 186×100 and ≤ 10 KiB; `/covers/homebrew/<stem>.img`
   overrides the embedded cover if present.
 5. Sidecar assets that do not fit in RAM_EMU stay as sibling SD files.

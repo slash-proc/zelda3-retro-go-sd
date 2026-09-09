@@ -41,10 +41,12 @@ releases both carry the `redux` code.
 | `nl` | Dutch fan translation | `FA8ADFDBA2697C9A54D583A1284A22AC764C7637` |
 | `sv` | Swedish fan translation | `43CD3438469B2C3FE879EA2F410B3EF3CB3F1CA4` |
 
-A base ROM whose hash is not listed is accepted only with the `noHashCheck`
-flag. Hosts should set it automatically for an unrecognised file rather than
-exposing it as a control; it is not a decision a user can make usefully. With
-that flag set, the first registered file is taken as the base.
+A base ROM whose hash is not listed is admitted or refused by the **host**,
+before the module runs, according to the input's `strict` flag in the manifest.
+The module no longer takes a flag for it: it hashes content to resolve roles,
+which is a different job, and accepts whatever it is given. When no file
+identifies as the US release, the first registered one is used as the base and a
+warning says so.
 
 A `language` ROM whose hash is not listed is refused, because there is nothing
 to fall back on: the converter would not know which language it was reading.
@@ -86,7 +88,7 @@ listed translations:
 
 | Bit | Name | |
 |---|---|---|
-| 0 | `noHashCheck` | accept a base ROM whose hash is unknown |
+| 0 | — | retired; admission is the host's, via the input's `strict` flag |
 | 1 | `noIncludeRom` | omit the source ROM from the output |
 
 Unrecognised bits are rejected rather than ignored. Bit 1 is declared and

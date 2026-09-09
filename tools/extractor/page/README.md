@@ -33,9 +33,11 @@ the module has been hash-matched and verified, so its presence is the result of
 the check while its content is something a user wants. On failure the page says
 it cannot run, and why.
 
-**No expert controls.** An unrecognised base ROM is almost always a modified
-copy, so the page sets `noHashCheck` itself and says what it assumed, rather
-than exposing a checkbox nobody can evaluate. Language is the one genuine
+**No expert controls.** Whether an unrecognised file is admitted is the
+manifest's decision, through the input's `strict` flag, not a checkbox. Both of
+this project's inputs are strict, because the port reads fixed addresses out of
+the US release: a ROM that matches no listed hash is the wrong file, and saying
+so at the picker is kinder than failing after a run. Language is the one genuine
 choice a user can make, and it is made by which ROMs they add, beside the file
 picker.
 

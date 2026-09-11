@@ -1,5 +1,6 @@
 {
   "originalSystem": "snes",
+  "originalName": "The Legend of Zelda: A Link to the Past",
   "tool": {
     "id": "zelda3-assets",
     "title": {
@@ -48,12 +49,12 @@
         "label": {
           "en": "Translated ROM",
           "fr": "ROM traduite",
-          "de": "Übersetztes ROM"
+          "de": "\u00dcbersetztes ROM"
         },
         "description": {
           "en": "Add languages from translated ROMs. One file per language.",
-          "fr": "Ajoutez des langues à partir de ROMs traduites. Un fichier par langue.",
-          "de": "Sprachen aus übersetzten ROMs hinzufügen. Eine Datei je Sprache."
+          "fr": "Ajoutez des langues \u00e0 partir de ROMs traduites. Un fichier par langue.",
+          "de": "Sprachen aus \u00fcbersetzten ROMs hinzuf\u00fcgen. Eine Datei je Sprache."
         },
         "extensions": [
           ".sfc",
@@ -74,8 +75,8 @@
             "id": "fr",
             "label": {
               "en": "French",
-              "fr": "Français",
-              "de": "Französisch"
+              "fr": "Fran\u00e7ais",
+              "de": "Franz\u00f6sisch"
             },
             "sha1": "229364A1B92A05167CD38609B1AA98F7041987CC"
           },
@@ -83,8 +84,8 @@
             "id": "fr-c",
             "label": {
               "en": "French (Canada)",
-              "fr": "Français (Canada)",
-              "de": "Französisch (Kanada)"
+              "fr": "Fran\u00e7ais (Canada)",
+              "de": "Franz\u00f6sisch (Kanada)"
             },
             "sha1": "C1C6C7F76FFF936C534FF11F87A54162FC0AA100"
           },
@@ -146,8 +147,8 @@
             "id": "nl",
             "label": {
               "en": "Dutch (fan)",
-              "fr": "Néerlandais (fan)",
-              "de": "Niederländisch (Fan)"
+              "fr": "N\u00e9erlandais (fan)",
+              "de": "Niederl\u00e4ndisch (Fan)"
             },
             "sha1": "FA8ADFDBA2697C9A54D583A1284A22AC764C7637"
           },
@@ -155,7 +156,7 @@
             "id": "sv",
             "label": {
               "en": "Swedish (fan)",
-              "fr": "Suédois (fan)",
+              "fr": "Su\u00e9dois (fan)",
               "de": "Schwedisch (Fan)"
             },
             "sha1": "43CD3438469B2C3FE879EA2F410B3EF3CB3F1CA4"
@@ -178,5 +179,6 @@
         }
       }
     ]
-  }
+  },
+  "$comment": "originalName is the title as published: 'Zelda 3' is what the device shows, not what a library indexes."
 }

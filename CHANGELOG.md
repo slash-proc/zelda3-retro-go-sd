@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.3.3] - 2026-09-13
+
+### Changed
+
+- Publish conservative runtime save and savestate support metadata for LFS sizing.
+
 ## [v0.3.2] - 2026-09-09
 
 ### Fixed

@@ -1,6 +1,11 @@
 {
   "originalSystem": "snes",
   "originalName": "The Legend of Zelda: A Link to the Past",
+  "runtime": {
+    "$comment": "The device callback writes exactly 8 KiB from ZeldaGetSram().",
+    "savestate": { "supported": true },
+    "save": { "supported": true, "bytes": 8192 }
+  },
   "tool": {
     "id": "zelda3-assets",
     "title": {
